@@ -1,0 +1,54 @@
+# ============================================================================
+# Requirements - Data Warehouse Credits Brasil
+# Python 3.10+
+# ============================================================================
+
+# Database
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.23
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.2
+
+# API Clients
+requests==2.31.0
+httpx==0.25.2
+
+# Configuration
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Logging
+loguru==0.7.2
+
+# Scheduling (optional)
+schedule==1.2.0
+APScheduler==3.10.4
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+
+# Code Quality
+black==23.12.1
+flake8==6.1.0
+mypy==1.8.0
+
+# Utilities
+click==8.1.7
+tqdm==4.66.1
+python-dateutil==2.8.2
+
+# Excel/CSV
+openpyxl==3.1.2
+xlrd==2.0.1
+
+# JSON
+orjson==3.9.10
+
+# Validation
+pydantic==2.5.3
+
+# Retry logic
+tenacity==8.2.3

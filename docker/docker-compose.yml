@@ -1,0 +1,111 @@
+version: '3.8'
+
+# ============================================================================
+# Docker Compose - Credits Brasil ETL Processor
+# Versão: 2.0
+# Data: Novembro 2025
+# ============================================================================
+#
+# IMPORTANTE: Este docker-compose gerencia APENAS o ambiente Python para ETL.
+# O PostgreSQL está sendo gerenciado externamente (local ou servidor remoto).
+#
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # Container Python para Processamento ETL
+  # --------------------------------------------------------------------------
+  etl-processor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: credits-dw-etl
+    restart: unless-stopped
+
+    environment:
+      # Configurações do banco (PostgreSQL externo)
+      DB_HOST: ${DB_HOST:-host.docker.internal}  # Use host.docker.internal para banco local
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-credits_dw}
+      DB_USER: ${DB_USER:-dw_developer}
+      DB_PASSWORD: ${DB_PASSWORD:-Dev@Credits2024!}
+
+      # Configurações da API Ploomes
+      PLOOMES_API_KEY: ${PLOOMES_API_KEY}
+      PLOOMES_API_URL: ${PLOOMES_API_URL:-https://api2.ploomes.com}
+
+      # Caminhos dos dados
+      DATA_INPUT_PATH: /app/data/input
+      DATA_PROCESSED_PATH: /app/data/processed
+
+      # Configurações de logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_PATH: /app/logs
+
+      # Timezone
+      TZ: America/Sao_Paulo
+
+    volumes:
+      # Código Python (desenvolvimento)
+      - ../python:/app/python
+
+      # Dados de entrada (pasta compartilhada onde vêm os arquivos CSV/JSON)
+      - ${DATA_INPUT_PATH:-./data/input}:/app/data/input
+
+      # Dados processados (backup dos arquivos já carregados)
+      - ${DATA_PROCESSED_PATH:-./data/processed}:/app/data/processed
+
+      # Logs
+      - ${LOG_PATH:-./logs}:/app/logs
+
+      # Arquivo .env (opcional, para configurações locais)
+      - ../.env:/app/.env:ro
+
+    # Limites de recursos
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # Permite acesso à rede do host (necessário para conectar no PostgreSQL local)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Comando padrão: mantém container rodando
+    command: tail -f /dev/null
+
+    # Healthcheck básico
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ============================================================================
+# OBSERVAÇÕES DE USO
+# ============================================================================
+#
+# 1. INICIAR CONTAINER:
+#    cd docker && docker-compose up -d
+#
+# 2. EXECUTAR SCRIPT ETL:
+#    docker-compose exec etl-processor python python/ingestors/ingest_onedrive_clientes.py
+#
+# 3. ACESSAR SHELL DO CONTAINER:
+#    docker-compose exec etl-processor bash
+#
+# 4. VER LOGS:
+#    docker-compose logs -f etl-processor
+#
+# 5. PARAR CONTAINER:
+#    docker-compose down
+#
+# 6. REBUILD APÓS MUDANÇAS NO DOCKERFILE:
+#    docker-compose up -d --build
+#
+# ============================================================================
