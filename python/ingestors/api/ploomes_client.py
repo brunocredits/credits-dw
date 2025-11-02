@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-Módulo: ploomes_client.py
-Descrição: Cliente para API do Ploomes CRM
 Documentação: https://developers.ploomes.com
-Versão: 2.0
 """
 
 import os
@@ -93,7 +90,6 @@ class PloomesClient:
 
     def get_all_contacts(self, max_records: Optional[int] = None) -> List[Dict]:
         """
-        Busca TODOS os contatos do Ploomes com paginação automática.
 
         Args:
             max_records: Limite máximo de registros (None = todos)
