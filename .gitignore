@@ -1,1 +1,5 @@
 .claude/
+.env
+docker/data/
+docker/logs/
+DOCUMENTATION.md
