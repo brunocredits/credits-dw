@@ -15,7 +15,7 @@ Solução de Data Warehouse que consolida dados de múltiplas fontes em uma cama
 - ✅ **Docker Compose** - Para orquestração de containers
 - ✅ **Scripts de Ingestão Python** - Para ETL de CSV e API
 
---- 
+---
 
 ## 🏗️ Arquitetura
 
