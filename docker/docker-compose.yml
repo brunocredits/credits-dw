@@ -30,9 +30,7 @@ services:
       DB_USER: ${DB_USER:-dw_developer}
       DB_PASSWORD: ${DB_PASSWORD:-Dev@Credits2024!}
 
-      # Configurações da API Ploomes
-      PLOOMES_API_KEY: ${PLOOMES_API_KEY}
-      PLOOMES_API_URL: ${PLOOMES_API_URL:-https://api2.ploomes.com}
+
 
       # Caminhos dos dados
       DATA_INPUT_PATH: /app/data/input
@@ -60,6 +58,9 @@ services:
 
       # Arquivo .env (opcional, para configurações locais)
       - ../.env:/app/.env:ro
+
+      # SQL scripts
+      - ../sql:/app/sql
 
     # Limites de recursos
     deploy:
