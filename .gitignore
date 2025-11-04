@@ -4,3 +4,5 @@ Pasta1(1).xlsx
 GEMINI.md
 CLAUDE.md
 "Modelo Padrão (Resumos).docx"
+.env
+docker/logs/

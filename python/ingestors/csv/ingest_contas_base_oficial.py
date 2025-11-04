@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Dict, List
 
 # Adicionar diretório raiz ao path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from csv.base_csv_ingestor import BaseCSVIngestor
+from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 
 class IngestContasBaseOficial(BaseCSVIngestor):
     """
@@ -34,15 +34,15 @@ class IngestContasBaseOficial(BaseCSVIngestor):
         """
         return {
             'ID': 'id',
-            'CNPJ/CPF PK': 'cnpj_cpf_pk',
-            'Id_Conta FK': 'id_conta_fk',
+            'CNPJ/CPF PK': 'cnpj_cpf',
+            'Id_Conta FK': 'Id_Conta',
             'Tipo': 'tipo',
             'Status': 'status',
-            'Status de Qualificação da conta': 'status_qualificacao_conta',
+            'Status de Qualificação da conta': 'status_qualificação_da_conta',
             'Data de criação': 'data_criacao',
             'Grupo': 'grupo',
             'Razão Social': 'razao_social',
-            'Responsável da Conta': 'responsavel_conta',
+            'Responsável da Conta': 'resposanvel_conta',
             'Financeiro': 'financeiro',
             'Corte': 'corte',
             'Faixa': 'faixa'
@@ -54,15 +54,15 @@ class IngestContasBaseOficial(BaseCSVIngestor):
         """
         return [
             'id',
-            'cnpj_cpf_pk',
-            'id_conta_fk',
+            'cnpj_cpf',
+            'Id_Conta',
             'tipo',
             'status',
-            'status_qualificacao_conta',
+            'status_qualificação_da_conta',
             'data_criacao',
             'grupo',
             'razao_social',
-            'responsavel_conta',
+            'resposanvel_conta',
             'financeiro',
             'corte',
             'faixa'
