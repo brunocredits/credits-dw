@@ -118,9 +118,7 @@ class BaseCSVIngestor(ABC):
         # Aplicar mapeamento de colunas
         df_bronze = df.rename(columns=self.get_column_mapping())
 
-        # Adicionar metadados
-        df_bronze['data_carga_bronze'] = datetime.now()
-        df_bronze['nome_arquivo_origem'] = self.arquivo_nome
+
 
         # Garantir que todas as colunas Bronze existem
         colunas_bronze = self.get_bronze_columns()
@@ -128,11 +126,7 @@ class BaseCSVIngestor(ABC):
             if col not in df_bronze.columns and col not in ['data_carga_bronze', 'nome_arquivo_origem']:
                 df_bronze[col] = None
 
-        # Adicionar metadados às colunas se não estiverem na lista
-        if 'data_carga_bronze' not in colunas_bronze:
-            colunas_bronze.append('data_carga_bronze')
-        if 'nome_arquivo_origem' not in colunas_bronze:
-            colunas_bronze.append('nome_arquivo_origem')
+
 
         registros = df_bronze[colunas_bronze].values.tolist()
 
@@ -155,7 +149,7 @@ class BaseCSVIngestor(ABC):
             self.logger.info(f"Tabela {self.tabela_destino} truncada")
 
             # Inserir dados
-            colunas_str = ', '.join(colunas)
+            colunas_str = ', '.join([f'\"{col}\"' for col in colunas])
             placeholders = ', '.join(['%s'] * len(colunas))
             query = f"INSERT INTO {self.tabela_destino} ({colunas_str}) VALUES %s"
 

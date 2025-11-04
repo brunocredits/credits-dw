@@ -48,7 +48,7 @@ services:
       - ../python:/app/python
 
       # Dados de entrada (pasta compartilhada onde vêm os arquivos CSV/JSON)
-      - ${DATA_INPUT_PATH:-./data/input}:/app/data/input
+      - ./data:/app/data
 
       # Dados processados (backup dos arquivos já carregados)
       - ${DATA_PROCESSED_PATH:-./data/processed}:/app/data/processed
@@ -77,7 +77,8 @@ services:
       - "host.docker.internal:host-gateway"
 
     # Comando padrão: mantém container rodando
-    command: tail -f /dev/null
+    command: >
+      bash -c "chmod -R 777 /app/data/processed && tail -f /dev/null"
 
     # Healthcheck básico
     healthcheck:
