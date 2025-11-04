@@ -31,26 +31,19 @@ class ContasBaseOficialIngestor(BaseCSVIngestor):
         Retorna o mapeamento de colunas do CSV para a tabela Bronze.
         """
         return {
-            'ID_Cliente': 'cliente_id',
-            'Codigo': 'codigo_cliente',
-            'CNPJ_CPF': 'cnpj_cpf',
-            'Razao_Social': 'razao_social',
-            'Nome_Fantasia': 'nome_fantasia',
-            'Tipo': 'tipo_pessoa',
-            'Email': 'email',
-            'Telefone': 'telefone',
-            'Celular': 'celular',
-            'Logradouro': 'logradouro',
-            'Numero': 'numero',
-            'Complemento': 'complemento',
-            'Bairro': 'bairro',
-            'Cidade': 'cidade',
-            'UF': 'estado',
-            'CEP': 'cep',
-            'Segmento': 'segmento',
-            'Porte': 'porte_empresa',
-            'Consultor': 'consultor_responsavel',
-            'Status': 'status_cliente'
+            'ID': 'id',
+            'CNPJ/CPF PK': 'cnpj_cpf',
+            'Id_Conta FK': 'Id_Conta',
+            'Tipo': 'tipo',
+            'Status': 'status',
+            'Status de Qualificação da conta': 'status_qualificação_da_conta',
+            'Data de criação': 'data_criacao',
+            'Grupo': 'grupo',
+            'Razão Social': 'razao_social',
+            'Responsável da Conta': 'resposanvel_conta',
+            'Financeiro': 'financeiro',
+            'Corte': 'corte',
+            'Faixa': 'faixa'
         }
 
     def get_bronze_columns(self) -> list:
@@ -58,10 +51,19 @@ class ContasBaseOficialIngestor(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze na ordem correta.
         """
         return [
-            'cliente_id', 'codigo_cliente', 'cnpj_cpf', 'razao_social', 'nome_fantasia',
-            'tipo_pessoa', 'email', 'telefone', 'celular', 'logradouro', 'numero',
-            'complemento', 'bairro', 'cidade', 'estado', 'cep', 'segmento',
-            'porte_empresa', 'consultor_responsavel', 'status_cliente'
+            'id',
+            'cnpj_cpf',
+            'Id_Conta',
+            'tipo',
+            'status',
+            'status_qualificação_da_conta',
+            'data_criacao',
+            'grupo',
+            'razao_social',
+            'resposanvel_conta',
+            'financeiro',
+            'corte',
+            'faixa'
         ]
 
 
