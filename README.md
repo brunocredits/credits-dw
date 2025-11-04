@@ -1,137 +1,122 @@
-# 🏦 Data Warehouse Credits Brasil
+# Data Warehouse - Credits Brasil
 
-> **Versão:** 2.0 | **Arquitetura:** Bronze Layer | **PostgreSQL** 15
+## 1. Visão Geral
 
----
+Esta solução de Data Warehouse foi projetada para consolidar dados de múltiplas fontes em uma camada Bronze em um banco de dados PostgreSQL. O objetivo principal é criar uma fonte única de verdade para dados brutos, que podem ser usados para análises e relatórios.
 
-## 📋 Visão Geral
+## 2. Arquitetura
 
-Solução de Data Warehouse que consolida dados de múltiplas fontes em uma camada Bronze em um banco de dados PostgreSQL. O objetivo principal é criar uma fonte única de verdade para dados brutos, que podem ser usados para análises e relatórios.
+A arquitetura segue um modelo de camada única (Bronze) onde os dados são ingeridos de fontes externas e armazenados em sua forma bruta, com o mínimo de transformação.
 
-### ✨ Recursos Principais
+- **Fontes de Dados:** Arquivos CSV
+- **Camada de Destino:** Bronze (Raw Data)
+- **Banco de Dados:** PostgreSQL
 
-- ✅ **4 tabelas Bronze** - Dados brutos de fontes CSV
-- ✅ **Scripts SQL** - Para criação da estrutura inicial do banco de dados
-- ✅ **Docker Compose** - Para orquestração de containers
-- ✅ **Scripts de Ingestão Python** - Para ETL de CSV
+## 3. Pré-requisitos
 
----
+Antes de iniciar, certifique-se de que os seguintes softwares estão instalados em sua máquina:
 
-## 🏗️ Arquitetura
+- Docker (versão 20 ou superior)
+- Docker Compose
+- Python (versão 3.10 ou superior)
+- Um cliente PostgreSQL (como `psql` ou DBeaver) para interagir com o banco de dados.
 
-```
-FONTES (CSV) → BRONZE (Raw)
-```
+## 4. Instalação e Configuração
 
-- **Bronze:** Dados brutos preservados com o mínimo de transformação, garantindo que os dados brutos sejam preservados em seu formato original.
+Siga os passos abaixo para configurar o ambiente de desenvolvimento.
 
-### 📊 Fontes de Dados
+### 4.1. Clonar o Repositório
 
-| Fonte | Tipo | Frequência | Status |
-|-------|------|-----------|--------|
-| **contas_base_oficial.csv** | CSV | Manual | ✅ Implementado |
-| **faturamento.csv** | CSV | Manual | ✅ Implementado |
-| **data.csv** | CSV | Manual | ✅ Implementado |
-| **usuarios.csv** | CSV | Manual | ✅ Implementado |
-
----
-
-## 📂 Estrutura do Projeto
-
-```
-credits-database/
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── sql/
-│   ├── init/                   # Schemas e roles
-│   └── bronze/                 # Tabelas DDL
-├── python/
-│   └── ingestors/
-│       └── csv/
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
----
-
-## 🚀 Instalação e Setup
-
-### Pré-requisitos
-
-- Docker 20+ e Docker Compose
-- Python 3.10+ (para desenvolvimento local)
-- PostgreSQL 15 (gerenciado externamente)
-
-### Quick Start
-
-#### 1. Clonar repositório
 ```bash
 git clone https://github.com/brunocredits/credits-dw.git
 cd credits-dw
 ```
 
-#### 2. Configurar ambiente
-Crie um arquivo `.env` com as credenciais do banco de dados.
+### 4.2. Configurar Variáveis de Ambiente
 
-**Variáveis OBRIGATÓRIAS:**
-- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+Crie um arquivo chamado `.env` na raiz do projeto. Este arquivo armazenará as credenciais de conexão com o banco de dados PostgreSQL. Adicione as seguintes variáveis ao arquivo `.env` e substitua pelos seus valores:
 
-#### 3. Inicializar banco de dados
-```bash
-psql -U <user> -d <database> -f sql/init/01-create-schemas.sql
-psql -U <user> -d <database> -f sql/bronze/01-create-bronze-tables.sql
+```
+DB_HOST=seu_host_de_banco_de_dados
+DB_PORT=sua_porta
+DB_NAME=seu_nome_de_banco_de_dados
+DB_USER=seu_usuario
+DB_PASSWORD=sua_senha
 ```
 
----
+### 4.3. Inicializar o Banco de Dados
 
-## 💻 Uso
+Os scripts SQL para criar os schemas e as tabelas necessárias estão localizados no diretório `sql/`. Você precisa executá-los no seu banco de dados PostgreSQL.
 
-### Colocando Arquivos para Processamento
+```bash
+# Conecte-se ao seu banco de dados e execute os seguintes comandos:
+psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f sql/init/01-create-schemas.sql
+psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f sql/init/02-create-audit-table.sql
+psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f sql/bronze/01-create-bronze-tables.sql
+```
 
-Copie os arquivos CSV para o diretório `docker/data/input/onedrive`.
+## 5. Ingestão de Dados
 
-### Executando Scripts de Ingestão
+O processo de ingestão de dados é executado através de scripts Python orquestrados pelo Docker Compose.
 
-Para executar um script de ingestão, use o `docker-compose exec`. Por exemplo, para ingerir o arquivo `contas_base_oficial.csv`:
+### 5.1. Preparar os Arquivos de Dados
+
+Coloque os arquivos CSV que você deseja ingerir no diretório `docker/data/input/onedrive/`. O nome do arquivo deve corresponder ao nome esperado pelo script de ingestão (ex: `contas_base_oficial.csv`).
+
+### 5.2. Executar o Container Docker
+
+Navegue até o diretório `docker` e inicie o container do processador de ETL em modo detached:
+
+```bash
+cd docker
+docker compose up -d
+```
+
+### 5.3. Executar um Script de Ingestão
+
+Use o comando `docker compose exec` para executar um script de ingestão específico. Por exemplo, para ingerir o arquivo `contas_base_oficial.csv`:
 
 ```bash
 docker compose exec etl-processor python python/ingestors/csv/ingest_contas_base_oficial.py
 ```
 
----
+## 6. Desenvolvimento
 
-## 🛠️ Desenvolvimento
+### 6.1. Qualidade de Código
 
-### Code Quality
+O projeto utiliza as seguintes ferramentas para garantir a qualidade do código:
+
+- **Formatação:** `black`
+- **Linting:** `flake8`
+- **Type Checking:** `mypy`
+
+Para executar as ferramentas, use os seguintes comandos:
 
 ```bash
-# Formatação
 black python/
-
-# Linting
 flake8 python/
-
-# Type checking
 mypy python/
 ```
 
----
+## 7. Estrutura do Banco de Dados
 
-## 🔒 Segurança
+A camada Bronze contém as seguintes tabelas:
 
-- ✅ Arquivo `.env` **NUNCA** deve ser commitado (já está no `.gitignore`)
-- ✅ Use roles específicos do PostgreSQL.
+- **`bronze.contas_base_oficial`**: Armazena os dados da base oficial de contas.
+- **`bronze.faturamento`**: Armazena os dados de faturamento.
+- **`bronze.data`**: Tabela de dados genéricos.
+- **`bronze.usuarios`**: Armazena informações de usuários.
+- **`credits.historico_atualizacoes`**: Tabela de auditoria que registra todas as execuções de ingestão.
 
----
+## 8. Segurança
 
-## 📞 Suporte
+- O arquivo `.env` contém informações sensíveis e **nunca** deve ser commitado no repositório. Ele já está incluído no `.gitignore` para prevenir commits acidentais.
+- Recomenda-se o uso de roles e permissões específicas no PostgreSQL para limitar o acesso do usuário da aplicação.
 
-- Para issues: Abra um issue no repositório
+## 9. Suporte
 
----
+Para relatar problemas ou solicitar suporte, por favor, abra uma issue no repositório do GitHub.
 
-## 📜 Licença
+## 10. Licença
 
-Propriedade de Credits Brasil © 2025
+Este projeto é de propriedade da Credits Brasil © 2025.
