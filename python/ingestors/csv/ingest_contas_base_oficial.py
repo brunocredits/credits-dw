@@ -1,73 +1,70 @@
 #!/usr/bin/env python3
 """
 Script: ingest_contas_base_oficial.py
-Descrição: Ingestão de dados de contas do OneDrive CSV para a camada Bronze
-Frequência: Diária
-Versão: 1.0
+Descrição: Ingestão de dados da base oficial de contas para a camada Bronze
 """
 
 import sys
 from pathlib import Path
-from typing import Dict, List
 
 # Adicionar diretório raiz ao path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 
-class IngestContasBaseOficial(BaseCSVIngestor):
+
+class ContasBaseOficialIngestor(BaseCSVIngestor):
     """
-    Ingestor para os dados de contas da base oficial.
+    Ingestor para a base oficial de contas.
     """
 
     def __init__(self):
         super().__init__(
-            script_name='ingest_contas_base_oficial.py',
-            tabela_destino='bronze.contas_base_oficial',
-            arquivo_nome='contas_base_oficial.csv',
-            input_subdir='onedrive'
+            script_name="ingest_contas_base_oficial.py",
+            tabela_destino="bronze.contas_base_oficial",
+            arquivo_nome="contas_base_oficial.csv",
+            input_subdir="onedrive"
         )
 
-    def get_column_mapping(self) -> Dict[str, str]:
+    def get_column_mapping(self) -> dict:
         """
         Retorna o mapeamento de colunas do CSV para a tabela Bronze.
         """
         return {
-            'ID': 'id',
-            'CNPJ/CPF PK': 'cnpj_cpf',
-            'Id_Conta FK': 'Id_Conta',
-            'Tipo': 'tipo',
-            'Status': 'status',
-            'Status de Qualificação da conta': 'status_qualificação_da_conta',
-            'Data de criação': 'data_criacao',
-            'Grupo': 'grupo',
-            'Razão Social': 'razao_social',
-            'Responsável da Conta': 'resposanvel_conta',
-            'Financeiro': 'financeiro',
-            'Corte': 'corte',
-            'Faixa': 'faixa'
+            'ID_Cliente': 'cliente_id',
+            'Codigo': 'codigo_cliente',
+            'CNPJ_CPF': 'cnpj_cpf',
+            'Razao_Social': 'razao_social',
+            'Nome_Fantasia': 'nome_fantasia',
+            'Tipo': 'tipo_pessoa',
+            'Email': 'email',
+            'Telefone': 'telefone',
+            'Celular': 'celular',
+            'Logradouro': 'logradouro',
+            'Numero': 'numero',
+            'Complemento': 'complemento',
+            'Bairro': 'bairro',
+            'Cidade': 'cidade',
+            'UF': 'estado',
+            'CEP': 'cep',
+            'Segmento': 'segmento',
+            'Porte': 'porte_empresa',
+            'Consultor': 'consultor_responsavel',
+            'Status': 'status_cliente'
         }
 
-    def get_bronze_columns(self) -> List[str]:
+    def get_bronze_columns(self) -> list:
         """
-        Retorna a lista de colunas da tabela Bronze.
+        Retorna a lista de colunas da tabela Bronze na ordem correta.
         """
         return [
-            'id',
-            'cnpj_cpf',
-            'Id_Conta',
-            'tipo',
-            'status',
-            'status_qualificação_da_conta',
-            'data_criacao',
-            'grupo',
-            'razao_social',
-            'resposanvel_conta',
-            'financeiro',
-            'corte',
-            'faixa'
+            'cliente_id', 'codigo_cliente', 'cnpj_cpf', 'razao_social', 'nome_fantasia',
+            'tipo_pessoa', 'email', 'telefone', 'celular', 'logradouro', 'numero',
+            'complemento', 'bairro', 'cidade', 'estado', 'cep', 'segmento',
+            'porte_empresa', 'consultor_responsavel', 'status_cliente'
         ]
 
-if __name__ == '__main__':
-    ingestor = IngestContasBaseOficial()
+
+if __name__ == "__main__":
+    ingestor = ContasBaseOficialIngestor()
     sys.exit(ingestor.executar())

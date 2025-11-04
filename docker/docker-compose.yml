@@ -26,9 +26,9 @@ services:
       # Configurações do banco (PostgreSQL externo)
       DB_HOST: ${DB_HOST:-host.docker.internal}  # Use host.docker.internal para banco local
       DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-credits_dw}
-      DB_USER: ${DB_USER:-dw_developer}
-      DB_PASSWORD: ${DB_PASSWORD:-Dev@Credits2024!}
+      DB_NAME: ${DB_NAME:-creditsdw}
+      DB_USER: ${DB_USER:-creditsdw}
+      DB_PASSWORD: ${DB_PASSWORD:-58230925AD@}
 
 
 

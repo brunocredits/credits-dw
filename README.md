@@ -1,6 +1,6 @@
 # 🏦 Data Warehouse Credits Brasil
 
-> **Versão:** 1.0 | **Arquitetura:** Bronze Layer | **PostgreSQL** 15
+> **Versão:** 2.0 | **Arquitetura:** Bronze Layer | **PostgreSQL** 15
 
 ---
 
@@ -10,17 +10,17 @@ Solução de Data Warehouse que consolida dados de múltiplas fontes em uma cama
 
 ### ✨ Recursos Principais
 
-- ✅ **Tabelas Bronze** - Dados brutos de fontes CSV e API Ploomes
+- ✅ **4 tabelas Bronze** - Dados brutos de fontes CSV
 - ✅ **Scripts SQL** - Para criação da estrutura inicial do banco de dados
 - ✅ **Docker Compose** - Para orquestração de containers
-- ✅ **Scripts de Ingestão Python** - Para ETL de CSV e API
+- ✅ **Scripts de Ingestão Python** - Para ETL de CSV
 
 ---
 
 ## 🏗️ Arquitetura
 
 ```
-FONTES (CSV, API) → BRONZE (Raw)
+FONTES (CSV) → BRONZE (Raw)
 ```
 
 - **Bronze:** Dados brutos preservados com o mínimo de transformação, garantindo que os dados brutos sejam preservados em seu formato original.
@@ -29,8 +29,10 @@ FONTES (CSV, API) → BRONZE (Raw)
 
 | Fonte | Tipo | Frequência | Status |
 |-------|------|-----------|--------|
-| **Arquivos CSV** | CSV | Manual | ✅ Implementado |
-| **Ploomes API** | API | Manual | ✅ Implementado |
+| **contas_base_oficial.csv** | CSV | Manual | ✅ Implementado |
+| **faturamento.csv** | CSV | Manual | ✅ Implementado |
+| **data.csv** | CSV | Manual | ✅ Implementado |
+| **usuarios.csv** | CSV | Manual | ✅ Implementado |
 
 ---
 
@@ -46,8 +48,7 @@ credits-database/
 │   └── bronze/                 # Tabelas DDL
 ├── python/
 │   └── ingestors/
-│       ├── csv/
-│       └── api/
+│       └── csv/
 ├── .gitignore
 ├── requirements.txt
 └── README.md
@@ -59,9 +60,9 @@ credits-database/
 
 ### Pré-requisitos
 
-- Docker e Docker Compose
-- Python 3.10+
-- PostgreSQL 15
+- Docker 20+ e Docker Compose
+- Python 3.10+ (para desenvolvimento local)
+- PostgreSQL 15 (gerenciado externamente)
 
 ### Quick Start
 
@@ -72,40 +73,31 @@ cd credits-dw
 ```
 
 #### 2. Configurar ambiente
-Crie um arquivo `.env` com as seguintes variáveis:
-```
-DB_HOST=...
-DB_PORT=...
-DB_NAME=...
-DB_USER=...
-DB_PASSWORD=...
-PLOOMES_API_KEY=...
-```
+Crie um arquivo `.env` com as credenciais do banco de dados.
+
+**Variáveis OBRIGATÓRIAS:**
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 
 #### 3. Inicializar banco de dados
 ```bash
-psql -U postgres -d credits_dw -f sql/init/01-create-schemas.sql
-psql -U postgres -d credits_dw -f sql/bronze/01-create-bronze-tables.sql
+psql -U <user> -d <database> -f sql/init/01-create-schemas.sql
+psql -U <user> -d <database> -f sql/bronze/01-create-bronze-tables.sql
 ```
 
 ---
 
 ## 💻 Uso
 
-O processo de ETL é executado usando Docker Compose.
+### Colocando Arquivos para Processamento
 
-### 1. Iniciar o container
-```bash
-cd docker && docker-compose up -d
-```
+Copie os arquivos CSV para o diretório `docker/data/input/onedrive`.
 
-### 2. Executar um script de ETL
+### Executando Scripts de Ingestão
+
+Para executar um script de ingestão, use o `docker-compose exec`. Por exemplo, para ingerir o arquivo `contas_base_oficial.csv`:
+
 ```bash
-docker-compose exec etl-processor python python/ingestors/csv/ingest_onedrive_clientes.py
-```
-ou
-```bash
-docker-compose exec etl-processor python python/ingestors/api/ingest_ploomes_contacts.py
+docker compose exec etl-processor python python/ingestors/csv/ingest_contas_base_oficial.py
 ```
 
 ---
@@ -113,8 +105,6 @@ docker-compose exec etl-processor python python/ingestors/api/ingest_ploomes_con
 ## 🛠️ Desenvolvimento
 
 ### Code Quality
-
-O projeto usa as seguintes ferramentas para garantir a qualidade do código:
 
 ```bash
 # Formatação
@@ -127,16 +117,12 @@ flake8 python/
 mypy python/
 ```
 
-### Testing
-
-O projeto usa `pytest` para testes. (TODO: Adicionar instruções sobre como executar os testes).
-
 ---
 
 ## 🔒 Segurança
 
 - ✅ Arquivo `.env` **NUNCA** deve ser commitado (já está no `.gitignore`)
-- ✅ Use roles específicos do PostgreSQL: `dw_developer`
+- ✅ Use roles específicos do PostgreSQL.
 
 ---
 
