@@ -53,3 +53,14 @@ CREATE TABLE IF NOT EXISTS bronze.contas_base_oficial (
     "Corte" VARCHAR,
     "Faixa" VARCHAR
 );
+
+-- ============================================================================
+-- Tabela: bronze.faturamento
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS bronze.faturamento (
+    "ID_Faturamento" UUID,
+    "ID_Conta" UUID,
+    "Data" TIMESTAMP,
+    "Receita" NUMERIC(18, 2),
+    "Moeda" VARCHAR(3)
+);
