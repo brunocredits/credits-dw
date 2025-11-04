@@ -77,8 +77,8 @@ services:
       - "host.docker.internal:host-gateway"
 
     # Comando padrão: mantém container rodando
-    command: >
-      bash -c "chmod -R 777 /app/data/processed && tail -f /dev/null"
+    command: tail -f /dev/null
+    user: root
 
     # Healthcheck básico
     healthcheck:
