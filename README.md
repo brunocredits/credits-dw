@@ -37,20 +37,28 @@ FONTES (CSV, API) → BRONZE (Raw)
 ## 📂 Estrutura do Projeto
 
 ```
-credits-database/
+credits-dw/
+├── .claude/
+├── .git/
+├── .venv/
 ├── docker/
 │   ├── Dockerfile
-│   └── docker-compose.yml
+│   ├── docker-compose.yml
+│   └── data/
+│       ├── input/
+│       ├── processed/
+│       └── templates/
+├── logs/
+├── python/
+│   ├── ingestors/
+│   │   └── csv/
+│   └── utils/
 ├── sql/
 │   ├── init/                   # Schemas e roles
 │   └── bronze/                 # Tabelas DDL
-├── python/
-│   └── ingestors/
-│       ├── csv/
-│       └── api/
 ├── .gitignore
-├── requirements.txt
-└── README.md
+├── README.md
+└── requirements.txt
 ```
 
 ---
@@ -92,20 +100,38 @@ psql -U postgres -d credits_dw -f sql/bronze/01-create-bronze-tables.sql
 
 ## 💻 Uso
 
-O processo de ETL é executado usando Docker Compose.
+O container `etl-processor` é projetado para ser um ambiente de execução para os scripts de ETL. Os scripts são executados **manualmente** via `docker-compose exec`.
 
-### 1. Iniciar o container
+### 1. Iniciar o container ETL
+Navegue até o diretório `docker` e inicie o serviço `etl-processor` em segundo plano:
 ```bash
-cd docker && docker-compose up -d
+cd docker && docker-compose up -d etl-processor
+```
+Este comando iniciará o container e o manterá ativo, aguardando a execução dos scripts.
+
+### 2. Executar um script de Ingestão (ETL)
+Para executar um script de ingestão específico, use o comando `docker-compose exec`. Certifique-se de que o container `etl-processor` esteja em execução.
+
+**Exemplo para CSV:**
+```bash
+docker-compose exec etl-processor python /app/python/ingestors/csv/ingest_data.py
 ```
 
-### 2. Executar um script de ETL
+**Para executar TODOS os ingestores CSV:**
 ```bash
-docker-compose exec etl-processor python python/ingestors/csv/ingest_onedrive_clientes.py
+docker-compose exec etl-processor python /app/python/run_all_ingestors.py
 ```
-ou
+
+**Observação:** Os caminhos dentro do container são `/app/python/...` para os scripts e `/app/data/...` para os arquivos de dados.
+
+### 3. Acessar o shell do container (para depuração ou execução manual)
 ```bash
-docker-compose exec etl-processor python python/ingestors/api/ingest_ploomes_contacts.py
+docker-compose exec etl-processor bash
+```
+
+### 4. Parar o container
+```bash
+docker-compose down etl-processor
 ```
 
 ---
