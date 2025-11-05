@@ -8,6 +8,7 @@ Versão: 1.0
 
 import sys
 from pathlib import Path
+import pandas as pd
 from typing import Dict, List
 
 # Adicionar diretório raiz ao path
@@ -25,7 +26,8 @@ class IngestData(BaseCSVIngestor):
             script_name='ingest_data.py',
             tabela_destino='bronze.data',
             arquivo_nome='data.csv',
-            input_subdir='onedrive'
+            input_subdir='onedrive',
+            format_dates=False
         )
 
     def get_column_mapping(self) -> Dict[str, str]:
@@ -47,6 +49,7 @@ class IngestData(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze.
         """
         return [
+            'data_completa',
             'semestre',
             'trimestre',
             'quarter',
@@ -55,6 +58,14 @@ class IngestData(BaseCSVIngestor):
             'dia',
             'ano'
         ]
+
+    def transformar_para_bronze(self, df):
+        """
+        Sobrescreve o método base para criar a coluna data_completa.
+        """
+        df_for_datetime = df.rename(columns={'ano': 'year', 'mes': 'month', 'dia': 'day'})
+        df['data_completa'] = pd.to_datetime(df_for_datetime[['year', 'month', 'day']])
+        return super().transformar_para_bronze(df)
 
 if __name__ == '__main__':
     ingestor = IngestData()
