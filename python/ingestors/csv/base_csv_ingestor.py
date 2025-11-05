@@ -180,7 +180,10 @@ class BaseCSVIngestor(ABC):
                 try:
                     # Tenta converter para datetime e depois para string YYYY-MM-DD
                     # errors='coerce' converterá datas inválidas para NaT (Not a Time)
-                    df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
+                    # Em seguida, substitui NaT por None para inserção no banco de dados
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                    df[col] = df[col].where(df[col].notna(), None) # Replace NaT with None
+                    df[col] = df[col].dt.strftime('%Y-%m-%d')
                     self.logger.info(f"Coluna '{col}' formatada para YYYY-MM-DD.")
                 except Exception as e:
                     self.logger.warning(f"Não foi possível formatar a coluna '{col}' como data: {e}")
