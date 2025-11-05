@@ -183,7 +183,8 @@ class BaseCSVIngestor(ABC):
                     # Em seguida, substitui NaT por None para inserção no banco de dados
                     df[col] = pd.to_datetime(df[col], errors='coerce')
                     df[col] = df[col].where(df[col].notna(), None) # Replace NaT with None
-                    df[col] = df[col].dt.strftime('%Y-%m-%d')
+                    # Aplica strftime apenas a valores não-nulos
+                    df[col] = df[col].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else None)
                     self.logger.info(f"Coluna '{col}' formatada para YYYY-MM-DD.")
                 except Exception as e:
                     self.logger.warning(f"Não foi possível formatar a coluna '{col}' como data: {e}")
