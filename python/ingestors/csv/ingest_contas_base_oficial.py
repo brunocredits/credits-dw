@@ -51,6 +51,7 @@ class ContasBaseOficialIngestor(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze na ordem correta.
         """
         return [
+            'sk_id',
             'id',
             'cnpj_cpf',
             'Id_Conta',

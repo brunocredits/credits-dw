@@ -1,6 +1,7 @@
 .claude/
 .env
-docker/data/
+docker/data/*
+!docker/data/templates/
 docker/logs/
 DOCUMENTATION.md
 Pasta1(1).csv

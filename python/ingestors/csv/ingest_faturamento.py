@@ -45,6 +45,7 @@ class IngestFaturamento(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze.
         """
         return [
+            'sk_id',
             'id_faturamento',
             'id_conta',
             'data',

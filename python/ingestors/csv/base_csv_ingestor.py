@@ -122,13 +122,16 @@ class BaseCSVIngestor(ABC):
 
         # Garantir que todas as colunas Bronze existem
         colunas_bronze = self.get_bronze_columns()
-        for col in colunas_bronze:
+        colunas_para_df = [col for col in colunas_bronze if col != 'sk_id']
+
+        for col in colunas_para_df:
             if col not in df_bronze.columns and col not in ['data_carga_bronze', 'nome_arquivo_origem']:
                 df_bronze[col] = None
 
-
-
-        registros = df_bronze[colunas_bronze].values.tolist()
+        # Adicionar None para sk_id nos registros, pois será gerado pelo banco
+        registros = []
+        for _, row in df_bronze[colunas_para_df].iterrows():
+            registros.append([None] + row.tolist())
 
         self.logger.info(f"Total de registros preparados: {len(registros)}")
         return registros, colunas_bronze

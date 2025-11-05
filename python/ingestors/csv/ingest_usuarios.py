@@ -51,6 +51,7 @@ class IngestUsuarios(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze.
         """
         return [
+            'sk_id',
             'id',
             'nome_empresa',
             'Nome',
