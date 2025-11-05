@@ -18,13 +18,7 @@ input/
 │   ├── 2025-02/
 │   │   └── faturamento_fevereiro_2025.csv
 │   └── ...
-├── consumo/            # 5 fontes diferentes de consumo
-│   ├── fonte1/
-│   ├── fonte2/
-│   ├── fonte3/
-│   ├── fonte4/
-│   └── fonte5/
-└── outros/             # Outras fontes CSV/JSON/TXT
+└── outros/             # Outras fontes CSV
 ```
 
 **Importante:**
@@ -58,9 +52,6 @@ processed/
 ## 📋 Formatos Suportados
 
 - **CSV** (separador: `;` ou `,`)
-- **JSON** (array de objetos ou line-delimited)
-- **TXT** (delimitado por tabulação)
-- **Excel** (XLSX, XLS) - via pandas
 
 ## 🔍 Exemplo de Uso
 
