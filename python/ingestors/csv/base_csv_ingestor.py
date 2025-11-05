@@ -47,10 +47,11 @@ class BaseCSVIngestor(ABC):
         self.arquivo_nome = arquivo_nome
 
         # Configurar caminhos
-        data_input = os.getenv('DATA_INPUT_PATH', './docker/data/input')
-        self.arquivo_path = os.path.join(data_input, input_subdir, arquivo_nome)
+        project_root = Path(__file__).resolve().parents[3] # Assuming 3 levels up from current file to project root
+        data_input = project_root / 'docker' / 'data' / 'input'
+        self.arquivo_path = data_input / input_subdir / arquivo_nome
 
-        data_processed = os.getenv('DATA_PROCESSED_PATH', './docker/data/processed')
+        data_processed = project_root / 'docker' / 'data' / 'processed'
         self.processed_dir = data_processed
 
         # Logger
