@@ -126,7 +126,8 @@ class BaseCSVIngestor(ABC):
             if col not in df_bronze.columns and col not in ['data_carga_bronze', 'nome_arquivo_origem']:
                 df_bronze[col] = None
 
-
+        # Formatar colunas de data
+        df_bronze = self._formatar_colunas_data(df_bronze)
 
         registros = df_bronze[colunas_bronze].values.tolist()
 
@@ -166,6 +167,24 @@ class BaseCSVIngestor(ABC):
             conn.rollback()
             self.logger.error(f"Erro na inserção: {str(e)}")
             raise
+
+    def _formatar_colunas_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Formata colunas que parecem ser de data para o padrão YYYY-MM-DD.
+        """
+        self.logger.info("Formatando colunas de data...")
+        for col in df.columns:
+            # Heurística simples para identificar colunas de data
+            # Pode ser expandido com uma lista explícita de colunas de data se necessário
+            if col.startswith('data_') or col.startswith('dt_'):
+                try:
+                    # Tenta converter para datetime e depois para string YYYY-MM-DD
+                    # errors='coerce' converterá datas inválidas para NaT (Not a Time)
+                    df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
+                    self.logger.info(f"Coluna '{col}' formatada para YYYY-MM-DD.")
+                except Exception as e:
+                    self.logger.warning(f"Não foi possível formatar a coluna '{col}' como data: {e}")
+        return df
 
     def mover_para_processed(self):
         """
