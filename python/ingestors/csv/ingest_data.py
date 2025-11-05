@@ -13,7 +13,7 @@ from typing import Dict, List
 # Adicionar diretório raiz ao path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from csv.base_csv_ingestor import BaseCSVIngestor
+from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 
 class IngestData(BaseCSVIngestor):
     """
