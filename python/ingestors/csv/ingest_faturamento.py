@@ -11,15 +11,9 @@ from pathlib import Path
 from typing import Dict, List
 
 # Adicionar diretório raiz ao path
-import os
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-# Adicionar diretório raiz ao path
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-
-# Definir DATA_INPUT_PATH explicitamente para o caminho correto
-os.environ['DATA_INPUT_PATH'] = '/app/data/input'
-
-from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
+from csv.base_csv_ingestor import BaseCSVIngestor
 
 class IngestFaturamento(BaseCSVIngestor):
     """
@@ -39,6 +33,8 @@ class IngestFaturamento(BaseCSVIngestor):
         Retorna o mapeamento de colunas do CSV para a tabela Bronze.
         """
         return {
+            'ID_Faturamento': 'id_faturamento',
+            'ID_Conta': 'id_conta',
             'Data': 'data',
             'Receita': 'receita',
             'Moeda': 'moeda'
@@ -49,7 +45,8 @@ class IngestFaturamento(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze.
         """
         return [
-            'sk_id',
+            'id_faturamento',
+            'id_conta',
             'data',
             'receita',
             'moeda'

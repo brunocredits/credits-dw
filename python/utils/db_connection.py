@@ -27,11 +27,11 @@ def init_connection_pool(minconn: int = 1, maxconn: int = 10):
         _connection_pool = SimpleConnectionPool(
             minconn=minconn,
             maxconn=maxconn,
-            host=os.getenv('DB_HOST', 'host.docker.internal'),
+            host=os.getenv('DB_HOST', 'localhost'),
             port=os.getenv('DB_PORT', '5432'),
-            database=os.getenv('DB_NAME', 'creditsdw'),
-            user=os.getenv('DB_USER', 'creditsdw'),
-            password=os.getenv('DB_PASSWORD', '58230925AD@')
+            database=os.getenv('DB_NAME', 'credits_dw'),
+            user=os.getenv('DB_USER', 'dw_developer'),
+            password=os.getenv('DB_PASSWORD', 'Dev@Credits2024!')
         )
 
 
@@ -43,11 +43,11 @@ def get_db_connection():
         Conexão psycopg2
     """
     conn = psycopg2.connect(
-        host=os.getenv('DB_HOST', 'host.docker.internal'),
+        host=os.getenv('DB_HOST', 'localhost'),
         port=os.getenv('DB_PORT', '5432'),
-        database=os.getenv('DB_NAME', 'creditsdw'),
-        user=os.getenv('DB_USER', 'creditsdw'),
-        password=os.getenv('DB_PASSWORD', '58230925AD@'),
+        database=os.getenv('DB_NAME', 'credits_dw'),
+        user=os.getenv('DB_USER', 'dw_developer'),
+        password=os.getenv('DB_PASSWORD', 'Dev@Credits2024!'),
         connect_timeout=10
     )
     

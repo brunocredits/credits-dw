@@ -1,0 +1,4 @@
+ID;CNPJ/CPF PK;Id_Conta FK;Tipo;Status;Status de Qualificação da conta;Data de criação;Grupo;Razão Social;Responsável da Conta;Financeiro;Corte;Faixa
+a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11;11.111.111/0001-11;a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11;PJ;Ativo;Qualificado;2025-01-01;Grupo A;Empresa Teste 1;Consultor 1;Sim;Corte 1;Faixa 1
+a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12;22.222.222/0002-22;a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12;PJ;Inativo;Nao Qualificado;2025-01-02;Grupo B;Empresa Teste 2;Consultor 2;Nao;Corte 2;Faixa 2
+a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13;333.333.333-33;a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13;PF;Ativo;Qualificado;2025-01-03;Grupo C;Pessoa Teste 3;Consultor 3;Sim;Corte 3;Faixa 3

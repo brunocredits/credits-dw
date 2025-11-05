@@ -1,11 +1,11 @@
 .claude/
-.env
-docker/data/*
-!docker/data/templates/
-docker/logs/
-DOCUMENTATION.md
 Pasta1(1).csv
 Pasta1(1).xlsx
 GEMINI.md
 CLAUDE.md
-"Modelo Padrão (Resumos).docx".venv/
+"Modelo Padrão (Resumos).docx"
+.env
+docker/logs/
+DOCUMENTATION.md
+__pycache__/
+logs/

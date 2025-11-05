@@ -1,97 +1,151 @@
-# Data Warehouse - Credits Brasil
+# 🏦 Data Warehouse Credits Brasil
 
-## 1. Visão Geral
+> **Versão:** 1.0 | **Arquitetura:** Bronze Layer | **PostgreSQL** 15
 
-Esta solução de Data Warehouse foi projetada para consolidar dados de múltiplas fontes em uma camada Bronze em um banco de dados PostgreSQL. O objetivo principal é criar uma fonte única de verdade para dados brutos, que podem ser usados para análises e relatórios.
+---
 
-## 2. Arquitetura
+## 📋 Visão Geral
 
-A arquitetura segue um modelo de camada única (Bronze) onde os dados são ingeridos de fontes externas e armazenados em sua forma bruta, com o mínimo de transformação.
+Solução de Data Warehouse que consolida dados de múltiplas fontes em uma camada Bronze em um banco de dados PostgreSQL. O objetivo principal é criar uma fonte única de verdade para dados brutos, que podem ser usados para análises e relatórios.
 
-- **Fontes de Dados:** Arquivos CSV
-- **Camada de Destino:** Bronze (Raw Data)
-- **Banco de Dados:** PostgreSQL (Azure)
+### ✨ Recursos Principais
 
-## 3. Pré-requisitos
+- ✅ **Tabelas Bronze** - Dados brutos de fontes CSV e API Ploomes
+- ✅ **Scripts SQL** - Para criação da estrutura inicial do banco de dados
+- ✅ **Docker Compose** - Para orquestração de containers
+- ✅ **Scripts de Ingestão Python** - Para ETL de CSV e API
 
-Antes de iniciar, certifique-se de que os seguintes softwares estão instalados em sua máquina:
+---
 
-- Docker (versão 20 ou superior)
-- Docker Compose
-- Python (versão 3.10 ou superior)
+## 🏗️ Arquitetura
 
-## 4. Instalação e Configuração
+```
+FONTES (CSV, API) → BRONZE (Raw)
+```
 
-Siga os passos abaixo para configurar o ambiente de desenvolvimento.
+- **Bronze:** Dados brutos preservados com o mínimo de transformação, garantindo que os dados brutos sejam preservados em seu formato original.
 
-### 4.1. Clonar o Repositório
+### 📊 Fontes de Dados
 
+| Fonte | Tipo | Frequência | Status |
+|-------|------|-----------|--------|
+| **Arquivos CSV** | CSV | Manual | ✅ Implementado |
+| **Ploomes API** | API | Manual | ✅ Implementado |
+
+---
+
+## 📂 Estrutura do Projeto
+
+```
+credits-database/
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── sql/
+│   ├── init/                   # Schemas e roles
+│   └── bronze/                 # Tabelas DDL
+├── python/
+│   └── ingestors/
+│       ├── csv/
+│       └── api/
+├── .gitignore
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 🚀 Instalação e Setup
+
+### Pré-requisitos
+
+- Docker e Docker Compose
+- Python 3.10+
+- PostgreSQL 15
+
+### Quick Start
+
+#### 1. Clonar repositório
 ```bash
 git clone https://github.com/brunocredits/credits-dw.git
 cd credits-dw
 ```
 
-### 4.2. Configurar o Acesso ao Banco de Dados
-
-As credenciais de acesso ao banco de dados PostgreSQL no Azure estão hardcoded no arquivo `python/utils/db_connection.py`. Certifique-se de que o seu endereço de IP está liberado no firewall do Azure para permitir conexões ao banco de dados.
-
-## 5. Ingestão de Dados
-
-O processo de ingestão de dados é executado através de scripts Python orquestrados pelo Docker Compose.
-
-### 5.1. Preparar os Arquivos de Dados
-
-Coloque os arquivos CSV que você deseja ingerir no diretório `docker/data/input/onedrive/`. O nome do arquivo deve corresponder ao nome esperado pelo script de ingestão (ex: `contas_base_oficial.csv`).
-
-### 5.2. Executar o Container Docker
-
-Navegue até o diretório `docker` e inicie o container do processador de ETL em modo detached:
-
-```bash
-cd docker
-docker compose up -d
+#### 2. Configurar ambiente
+Crie um arquivo `.env` com as seguintes variáveis:
+```
+DB_HOST=...
+DB_PORT=...
+DB_NAME=...
+DB_USER=...
+DB_PASSWORD=...
+PLOOMES_API_KEY=...
 ```
 
-### 5.3. Executar um Script de Ingestão
-
-Use o comando `docker compose exec` para executar um script de ingestão específico. Por exemplo, para ingerir o arquivo `contas_base_oficial.csv`:
-
+#### 3. Inicializar banco de dados
 ```bash
-docker compose exec etl-processor python python/ingestors/csv/ingest_contas_base_oficial.py
+psql -U postgres -d credits_dw -f sql/init/01-create-schemas.sql
+psql -U postgres -d credits_dw -f sql/bronze/01-create-bronze-tables.sql
 ```
 
-## 6. Desenvolvimento
+---
 
-### 6.1. Qualidade de Código
+## 💻 Uso
 
-O projeto utiliza as seguintes ferramentas para garantir a qualidade do código:
+O processo de ETL é executado usando Docker Compose.
 
-- **Formatação:** `black`
-- **Linting:** `flake8`
-- **Type Checking:** `mypy`
+### 1. Iniciar o container
+```bash
+cd docker && docker-compose up -d
+```
 
-Para executar as ferramentas, use os seguintes comandos:
+### 2. Executar um script de ETL
+```bash
+docker-compose exec etl-processor python python/ingestors/csv/ingest_onedrive_clientes.py
+```
+ou
+```bash
+docker-compose exec etl-processor python python/ingestors/api/ingest_ploomes_contacts.py
+```
+
+---
+
+## 🛠️ Desenvolvimento
+
+### Code Quality
+
+O projeto usa as seguintes ferramentas para garantir a qualidade do código:
 
 ```bash
+# Formatação
 black python/
+
+# Linting
 flake8 python/
+
+# Type checking
 mypy python/
 ```
 
-## 7. Estrutura do Banco de Dados
+### Testing
 
-A camada Bronze contém as seguintes tabelas:
+O projeto usa `pytest` para testes. (TODO: Adicionar instruções sobre como executar os testes).
 
-- **`bronze.contas_base_oficial`**: Armazena os dados da base oficial de contas.
-- **`bronze.faturamento`**: Armazena os dados de faturamento.
-- **`bronze.data`**: Tabela de dados genéricos.
-- **`bronze.usuarios`**: Armazena informações de usuários.
-- **`credits.historico_atualizacoes`**: Tabela de auditoria que registra todas as execuções de ingestão.
+---
 
-## 8. Suporte
+## 🔒 Segurança
 
-Para relatar problemas ou solicitar suporte, por favor, abra uma issue no repositório do GitHub.
+- ✅ Arquivo `.env` **NUNCA** deve ser commitado (já está no `.gitignore`)
+- ✅ Use roles específicos do PostgreSQL: `dw_developer`
 
-## 9. Licença
+---
 
-Este projeto é de propriedade da Credits Brasil © 2025.
+## 📞 Suporte
+
+- Para issues: Abra um issue no repositório
+
+---
+
+## 📜 Licença
+
+Propriedade de Credits Brasil © 2025
