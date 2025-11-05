@@ -10,3 +10,5 @@ DOCUMENTATION.md
 __pycache__/
 logs/
 docker/data/processed/
+docker/sql/
+python/scripts/
