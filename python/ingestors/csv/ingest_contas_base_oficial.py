@@ -33,9 +33,7 @@ class IngestContasBaseOficial(BaseCSVIngestor):
         Retorna o mapeamento de colunas do CSV para a tabela Bronze.
         """
         return {
-            'ID': 'id',
             'CNPJ/CPF PK': 'cnpj_cpf',
-            'Id_Conta FK': 'Id_Conta',
             'Tipo': 'tipo',
             'Status': 'status',
             'Status de Qualificação da conta': 'status_qualificação_da_conta',
@@ -53,9 +51,7 @@ class IngestContasBaseOficial(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze.
         """
         return [
-            'id',
             'cnpj_cpf',
-            'Id_Conta',
             'tipo',
             'status',
             'status_qualificação_da_conta',

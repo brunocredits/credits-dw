@@ -33,8 +33,6 @@ class IngestFaturamento(BaseCSVIngestor):
         Retorna o mapeamento de colunas do CSV para a tabela Bronze.
         """
         return {
-            'ID_Faturamento': 'id_faturamento',
-            'ID_Conta': 'id_conta',
             'Data': 'data',
             'Receita': 'receita',
             'Moeda': 'moeda'
@@ -45,8 +43,6 @@ class IngestFaturamento(BaseCSVIngestor):
         Retorna a lista de colunas da tabela Bronze.
         """
         return [
-            'id_faturamento',
-            'id_conta',
             'data',
             'receita',
             'moeda'
