@@ -10,17 +10,17 @@ Solução de Data Warehouse que consolida dados de múltiplas fontes em uma cama
 
 ### ✨ Recursos Principais
 
-- ✅ **Tabelas Bronze** - Dados brutos de fontes CSV e API Ploomes
+- ✅ **Tabelas Bronze** - Dados brutos de fontes CSV
 - ✅ **Scripts SQL** - Para criação da estrutura inicial do banco de dados
 - ✅ **Docker Compose** - Para orquestração de containers
-- ✅ **Scripts de Ingestão Python** - Para ETL de CSV e API
+- ✅ **Scripts de Ingestão Python** - Para ETL de CSV
 
 ---
 
 ## 🏗️ Arquitetura
 
 ```
-FONTES (CSV, API) → BRONZE (Raw)
+FONTES (CSV) → BRONZE (Raw)
 ```
 
 - **Bronze:** Dados brutos preservados com o mínimo de transformação, garantindo que os dados brutos sejam preservados em seu formato original.
@@ -30,7 +30,7 @@ FONTES (CSV, API) → BRONZE (Raw)
 | Fonte | Tipo | Frequência | Status |
 |-------|------|-----------|--------|
 | **Arquivos CSV** | CSV | Manual | ✅ Implementado |
-| **Ploomes API** | API | Manual | ✅ Implementado |
+| **Ploomes** | - | - | ❌ Não Implementado |
 
 ---
 
