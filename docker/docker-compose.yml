@@ -59,8 +59,7 @@ services:
       # Arquivo .env (opcional, para configurações locais)
       - ../.env:/app/.env:ro
 
-      # SQL scripts
-      - ../sql:/app/sql
+
 
     # Limites de recursos
     deploy:
@@ -77,8 +76,9 @@ services:
       - "host.docker.internal:host-gateway"
 
     # Comando padrão: mantém container rodando
+    user: root
     command: >
-      bash -c "chmod -R 777 /app/data/processed && tail -f /dev/null"
+      bash -c "chown -R etl_user:etl_user /app/logs /app/data/processed && chmod -R 777 /app/logs /app/data/processed && exec su etl_user -c \"tail -f /dev/null\""
 
     # Healthcheck básico
     healthcheck:

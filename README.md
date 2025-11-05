@@ -11,7 +11,7 @@ Solução de Data Warehouse que consolida dados de múltiplas fontes em uma cama
 ### ✨ Recursos Principais
 
 - ✅ **Tabelas Bronze** - Dados brutos de fontes CSV
-- ✅ **Scripts SQL** - Para criação da estrutura inicial do banco de dados
+
 - ✅ **Docker Compose** - Para orquestração de containers
 - ✅ **Scripts de Ingestão Python** - Para ETL de CSV
 
@@ -53,9 +53,7 @@ credits-dw/
 │   ├── ingestors/
 │   │   └── csv/
 │   └── utils/
-├── sql/
-│   ├── init/                   # Schemas e roles
-│   └── bronze/                 # Tabelas DDL
+
 ├── .gitignore
 ├── README.md
 └── requirements.txt
@@ -90,11 +88,7 @@ DB_PASSWORD=...
 PLOOMES_API_KEY=...
 ```
 
-#### 3. Inicializar banco de dados
-```bash
-psql -U postgres -d credits_dw -f sql/init/01-create-schemas.sql
-psql -U postgres -d credits_dw -f sql/bronze/01-create-bronze-tables.sql
-```
+
 
 ---
 
