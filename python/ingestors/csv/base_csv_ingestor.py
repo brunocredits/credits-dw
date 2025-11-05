@@ -151,12 +151,16 @@ class BaseCSVIngestor(ABC):
             cursor.execute(f"TRUNCATE TABLE {self.tabela_destino}")
             self.logger.info(f"Tabela {self.tabela_destino} truncada")
 
-            # Inserir dados
-            colunas_str = ', '.join([f'\"{col}\"' for col in colunas])
-            placeholders = ', '.join(['%s'] * len(colunas))
+            # Filtrar sk_id das colunas para inserção, pois é SERIAL PRIMARY KEY
+            colunas_para_insercao = [col for col in colunas if col != 'sk_id']
+            colunas_str = ', '.join([f'\"{col}\"' for col in colunas_para_insercao])
+            placeholders = ', '.join(['%s'] * len(colunas_para_insercao))
             query = f"INSERT INTO {self.tabela_destino} ({colunas_str}) VALUES %s"
 
-            execute_values(cursor, query, registros, page_size=1000)
+            # Remover o primeiro elemento (None para sk_id) de cada registro
+            registros_para_insercao = [registro[1:] for registro in registros]
+
+            execute_values(cursor, query, registros_para_insercao, page_size=1000)
             conn.commit()
 
             linhas_inseridas = len(registros)

@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Dict, List
 
 # Adicionar diretório raiz ao path
+import os
+
+# Adicionar diretório raiz ao path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+
+# Definir DATA_INPUT_PATH explicitamente para o caminho correto
+os.environ['DATA_INPUT_PATH'] = str(Path(__file__).resolve().parent.parent.parent.parent / 'docker' / 'data' / 'input')
 
 from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 
@@ -34,7 +40,6 @@ class IngestUsuarios(BaseCSVIngestor):
         # ATENÇÃO: Verifique se os nomes das colunas do CSV correspondem aos valores neste mapeamento.
         # Se os nomes das colunas no arquivo CSV forem diferentes, ajuste as chaves do dicionário abaixo.
         return {
-            'id': 'id',
             'nome_empresa': 'nome_empresa',
             'Nome': 'Nome',
             'area': 'area',
@@ -52,7 +57,6 @@ class IngestUsuarios(BaseCSVIngestor):
         """
         return [
             'sk_id',
-            'id',
             'nome_empresa',
             'Nome',
             'area',
