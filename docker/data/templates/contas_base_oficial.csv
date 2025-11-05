@@ -1,1 +1,3 @@
 CNPJ/CPF PK;Tipo;Status;Status de Qualificação da conta;Data de criação;Grupo;Razão Social;Responsável da Conta;Financeiro;Corte;Faixa
+12345678901234;PJ;Ativo;Qualificado;2023-01-15;Grupo A;Empresa Exemplo 1;João Silva;financeiro@exemplo1.com;Corte 1;Faixa 1
+98765432109876;PJ;Inativo;Não Qualificado;2022-11-20;Grupo B;Empresa Exemplo 2;Maria Souza;financeiro@exemplo2.com;Corte 2;Faixa 2

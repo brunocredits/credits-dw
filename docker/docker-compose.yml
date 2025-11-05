@@ -24,21 +24,14 @@ services:
 
     environment:
       # Configurações do banco (PostgreSQL externo)
-      DB_HOST: ${DB_HOST:-host.docker.internal}  # Use host.docker.internal para banco local
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-credits_dw}
-      DB_USER: ${DB_USER:-dw_developer}
-      DB_PASSWORD: ${DB_PASSWORD:-Dev@Credits2024!}
-
-
-
-      # Caminhos dos dados
-      DATA_INPUT_PATH: /app/data/input
-      DATA_PROCESSED_PATH: /app/data/processed
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
 
       # Configurações de logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      LOG_PATH: /app/logs
 
       # Timezone
       TZ: America/Sao_Paulo
@@ -47,19 +40,12 @@ services:
       # Código Python (desenvolvimento)
       - ../python:/app/python
 
-      # Dados de entrada (pasta compartilhada onde vêm os arquivos CSV/JSON)
+      # Dados e logs
       - ./data:/app/data
+      - ./logs:/app/logs
 
-      # Dados processados (backup dos arquivos já carregados)
-      - ${DATA_PROCESSED_PATH:-./data/processed}:/app/data/processed
-
-      # Logs
-      - ${LOG_PATH:-./logs}:/app/logs
-
-      # Arquivo .env (opcional, para configurações locais)
+      # Arquivo .env (para configurações locais)
       - ../.env:/app/.env:ro
-
-
 
     # Limites de recursos
     deploy:
@@ -71,14 +57,10 @@ services:
           cpus: '0.5'
           memory: 512M
 
-    # Permite acesso à rede do host (necessário para conectar no PostgreSQL local)
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
     # Comando padrão: mantém container rodando
     user: root
     command: >
-      bash -c "chown -R etl_user:etl_user /app/logs /app/data/processed && chmod -R 777 /app/logs /app/data/processed && exec su etl_user -c \"tail -f /dev/null\""
+      bash -c "chown -R etl_user:etl_user /app/logs /app/data && chmod -R 777 /app/logs /app/data && exec su etl_user -c \"tail -f /dev/null\""
 
     # Healthcheck básico
     healthcheck:

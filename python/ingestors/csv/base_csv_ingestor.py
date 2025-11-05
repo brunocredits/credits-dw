@@ -32,7 +32,8 @@ class BaseCSVIngestor(ABC):
                  script_name: str,
                  tabela_destino: str,
                  arquivo_nome: str,
-                 input_subdir: str = ''):
+                 input_subdir: str = '',
+                 format_dates: bool = True):
         """
         Inicializa o ingestor base.
 
@@ -41,17 +42,18 @@ class BaseCSVIngestor(ABC):
             tabela_destino: Nome completo da tabela Bronze (schema.tabela)
             arquivo_nome: Nome do arquivo CSV a ser processado
             input_subdir: Subdiretório dentro de DATA_INPUT_PATH (ex: 'onedrive', 'faturamento')
+            format_dates: Se as colunas de data devem ser formatadas
         """
         self.script_name = script_name
         self.tabela_destino = tabela_destino
         self.arquivo_nome = arquivo_nome
+        self.format_dates = format_dates
 
-        # Configurar caminhos
-        project_root = Path(__file__).resolve().parents[3] # Assuming 3 levels up from current file to project root
-        data_input = project_root / 'docker' / 'data' / 'input'
+        # Configurar caminhos dentro do container Docker
+        data_input = Path('/app/data/input')
         self.arquivo_path = data_input / input_subdir / arquivo_nome
 
-        data_processed = project_root / 'docker' / 'data' / 'processed'
+        data_processed = Path('/app/data/processed')
         self.processed_dir = data_processed
 
         # Logger
@@ -127,8 +129,9 @@ class BaseCSVIngestor(ABC):
             if col not in df_bronze.columns and col not in ['data_carga_bronze', 'nome_arquivo_origem']:
                 df_bronze[col] = None
 
-        # Formatar colunas de data
-        df_bronze = self._formatar_colunas_data(df_bronze)
+        # Formatar colunas de data, se necessário
+        if self.format_dates:
+            df_bronze = self._formatar_colunas_data(df_bronze)
 
         registros = df_bronze[colunas_bronze].values.tolist()
 
