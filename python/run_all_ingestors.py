@@ -7,6 +7,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from ingestors.csv.ingest_contas_base_oficial import IngestContasBaseOficial
 from ingestors.csv.ingest_data import IngestData
 from ingestors.csv.ingest_faturamento import IngestFaturamento
+from ingestors.csv.ingest_usuarios import IngestUsuarios
 
 def run_all_csv_ingestors():
     """
@@ -15,7 +16,8 @@ def run_all_csv_ingestors():
     ingestors = [
         IngestContasBaseOficial(),
         IngestData(),
-        IngestFaturamento()
+        IngestFaturamento(),
+        IngestUsuarios()
     ]
 
     print("Iniciando a execução de todos os ingestores CSV...")

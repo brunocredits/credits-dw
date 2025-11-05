@@ -9,3 +9,4 @@ docker/logs/
 DOCUMENTATION.md
 __pycache__/
 logs/
+docker/data/processed/
