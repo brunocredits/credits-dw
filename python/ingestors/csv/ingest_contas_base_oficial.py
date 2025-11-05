@@ -14,7 +14,7 @@ import os
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 # Definir DATA_INPUT_PATH explicitamente para o caminho correto
-os.environ['DATA_INPUT_PATH'] = str(Path(__file__).resolve().parent.parent.parent.parent / 'docker' / 'data' / 'input')
+os.environ['DATA_INPUT_PATH'] = '/app/data/input'
 
 from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 

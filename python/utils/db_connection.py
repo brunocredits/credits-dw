@@ -27,11 +27,11 @@ def init_connection_pool(minconn: int = 1, maxconn: int = 10):
         _connection_pool = SimpleConnectionPool(
             minconn=minconn,
             maxconn=maxconn,
-            host='creditsdw.postgres.database.azure.com',
-            port='5432',
-            database='creditsdw',
-            user='creditsdw',
-            password='58230925AD@'
+            host=os.getenv('DB_HOST', 'host.docker.internal'),
+            port=os.getenv('DB_PORT', '5432'),
+            database=os.getenv('DB_NAME', 'creditsdw'),
+            user=os.getenv('DB_USER', 'creditsdw'),
+            password=os.getenv('DB_PASSWORD', '58230925AD@')
         )
 
 
@@ -43,11 +43,11 @@ def get_db_connection():
         Conexão psycopg2
     """
     conn = psycopg2.connect(
-        host='creditsdw.postgres.database.azure.com',
-        port='5432',
-        database='creditsdw',
-        user='creditsdw',
-        password='58230925AD@',
+        host=os.getenv('DB_HOST', 'host.docker.internal'),
+        port=os.getenv('DB_PORT', '5432'),
+        database=os.getenv('DB_NAME', 'creditsdw'),
+        user=os.getenv('DB_USER', 'creditsdw'),
+        password=os.getenv('DB_PASSWORD', '58230925AD@'),
         connect_timeout=10
     )
     
