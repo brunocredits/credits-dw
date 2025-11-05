@@ -40,9 +40,10 @@ services:
       # Código Python (desenvolvimento)
       - ../python:/app/python
 
-      # Dados e logs
+      # Dados, logs e scripts SQL
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./sql:/app/docker/sql
 
       # Arquivo .env (para configurações locais)
       - ../.env:/app/.env:ro
