@@ -1,20 +1,10 @@
-version: '3.8'
-
 # ============================================================================
 # Docker Compose - Credits Brasil ETL Processor
-# Versão: 2.0
+# Versão: 2.1
 # Data: Novembro 2025
-# ============================================================================
-#
-# IMPORTANTE: Este docker-compose gerencia APENAS o ambiente Python para ETL.
-# O PostgreSQL está sendo gerenciado externamente (local ou servidor remoto).
-#
 # ============================================================================
 
 services:
-  # --------------------------------------------------------------------------
-  # Container Python para Processamento ETL
-  # --------------------------------------------------------------------------
   etl-processor:
     build:
       context: ..
@@ -23,74 +13,44 @@ services:
     restart: unless-stopped
 
     environment:
-      # Configurações do banco (PostgreSQL externo)
+      # Database configuration (loaded from .env file)
       DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
+      DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
 
-      # Configurações de logging
+      # Logging configuration
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
       # Timezone
       TZ: America/Sao_Paulo
 
     volumes:
-      # Código Python (desenvolvimento)
       - ../python:/app/python
-
-      # Dados, logs e scripts SQL
       - ./data:/app/data
       - ./logs:/app/logs
       - ./sql:/app/docker/sql
-
-      # Arquivo .env (para configurações locais)
       - ../.env:/app/.env:ro
 
-    # Limites de recursos
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 2G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
 
-    # Comando padrão: mantém container rodando
     user: root
     command: >
-      bash -c "chown -R etl_user:etl_user /app/logs /app/data && chmod -R 777 /app/logs /app/data && exec su etl_user -c \"tail -f /dev/null\""
+      bash -c "chown -R etl_user:etl_user /app/logs /app/data &&
+      chmod -R 777 /app/logs /app/data &&
+      exec su etl_user -c \"tail -f /dev/null\""
 
-    # Healthcheck básico
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-
-# ============================================================================
-# OBSERVAÇÕES DE USO
-# ============================================================================
-#
-# 1. INICIAR CONTAINER:
-#    cd docker && docker-compose up -d
-#
-# 2. EXECUTAR SCRIPT ETL:
-#    docker-compose exec etl-processor python python/ingestors/ingest_onedrive_clientes.py
-#
-# 3. ACESSAR SHELL DO CONTAINER:
-#    docker-compose exec etl-processor bash
-#
-# 4. VER LOGS:
-#    docker-compose logs -f etl-processor
-#
-# 5. PARAR CONTAINER:
-#    docker-compose down
-#
-# 6. REBUILD APÓS MUDANÇAS NO DOCKERFILE:
-#    docker-compose up -d --build
-#
-# ============================================================================

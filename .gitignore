@@ -1,14 +1,72 @@
+# Claude/AI files
 .claude/
+GEMINI.md
+
+# Security - Environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*credentials*.json
+*secrets*.yaml
+
+# Data files - Prevent committing sensitive data
+docker/data/processed/
+docker/data/input/**/*.csv
+docker/data/input/**/*.xlsx
+docker/data/input/**/*.xls
+docker/data/templates/*.csv
+docker/data/templates/*.xlsx
+!docker/data/templates/.gitkeep
+*.csv
+*.xlsx
+*.xls
 Pasta1(1).csv
 Pasta1(1).xlsx
-GEMINI.md
-CLAUDE.md
-"Modelo Padrão (Resumos).docx"
-.env
+
+# Logs
 docker/logs/
-DOCUMENTATION.md
-__pycache__/
 logs/
-docker/data/processed/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# SQL scripts that may contain sensitive data
 docker/sql/
-python/scripts/
+
+# Documentation that may be outdated
+DOCUMENTATION.md
+
+# Office documents that may contain sensitive data
+*.docx
+*.doc
+"Modelo Padrão (Resumos).docx"
+
+# Database dumps
+*.sql
+*.dump
+*.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
