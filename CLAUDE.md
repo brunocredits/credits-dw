@@ -7,10 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a **Data Warehouse ETL pipeline** for Credits Brasil that ingests CSV files into a PostgreSQL database using a **Bronze Layer architecture**. The project uses Python scripts orchestrated with Docker to process financial data from various sources.
 
 **Key Architecture Concepts:**
-- **Bronze Layer**: Raw data storage with minimal transformations (only column renaming and type standardization)
-- **Schemas**: `bronze` (raw data tables) and `credits` (ETL metadata/audit tables)
-- **Date Dimension**: `bronze.data` is a pre-calculated date dimension table for performance optimization in time-based queries
-- **Audit Trail**: All ETL executions are tracked in `credits.historico_atualizacoes`
+- **Bronze Layer**: Raw data storage with minimal transformations (only column renaming and type standardization). Tables have surrogate keys (sk_id) but PKs are not strictly required in raw layer. Uses **TRUNCATE/RELOAD** strategy.
+- **Silver Layer**: Dimensional model (Star Schema) with business logic, data quality rules, and SCD Type 2 for historical tracking. Uses **incremental/SCD Type 2** strategy.
+- **Schemas**: `bronze` (raw data), `silver` (dimensional model), and `credits` (ETL metadata/audit tables)
+- **Date Dimension**: `bronze.data` feeds `silver.dim_tempo` - pre-calculated date dimension with business calendar attributes
+- **Audit Trail**: All ETL executions are tracked in `credits.historico_atualizacoes` and Silver loads in `credits.silver_control`
+
+**Current Data Status:**
+- Bronze: ✓ Operational (4 tables with test data: 8 contas, 2 usuarios, 2 faturamento)
+- Silver: ⚠️ Partially loaded (dim_tempo: 4,018 records, dim_canal: 7 records, others awaiting transformers)
 
 ## Common Commands
 
@@ -31,6 +36,7 @@ docker compose exec etl-processor bash
 
 ### Running ETL Scripts
 
+**Bronze Layer (CSV Ingestors):**
 ```bash
 # Execute ALL CSV ingestors at once
 docker compose exec etl-processor python python/run_all_ingestors.py
@@ -39,6 +45,16 @@ docker compose exec etl-processor python python/run_all_ingestors.py
 docker compose exec etl-processor python python/ingestors/csv/ingest_faturamento.py
 docker compose exec etl-processor python python/ingestors/csv/ingest_usuarios.py
 docker compose exec etl-processor python python/ingestors/csv/ingest_contas_base_oficial.py
+```
+
+**Silver Layer (Transformers):**
+```bash
+# Execute ALL Silver transformations
+docker compose exec etl-processor python python/run_silver_transformations.py
+
+# Execute a specific transformer
+docker compose exec etl-processor python python/transformers/silver/transform_dim_tempo.py
+docker compose exec etl-processor python python/transformers/silver/transform_dim_clientes.py
 ```
 
 ### Code Quality
@@ -135,6 +151,24 @@ These are mounted from the host `docker/data/` directory.
 
 Columns starting with `data_` or `dt_` are automatically converted to `YYYY-MM-DD` format by `_formatar_colunas_data()` in `python/ingestors/csv/base_csv_ingestor.py:175-195`. Invalid dates are converted to `None`.
 
+## Bronze Layer Tables
+
+**bronze.contas_base_oficial** (8 records):
+- `cnpj_cpf`, `tipo`, `status`, `status_qualificação_da_conta`
+- `data_criacao`, `grupo`, `razao_social`, `responsavel_conta` ✓ (typo corrigido de "resposanvel_conta")
+- `financeiro`, `corte`, `faixa`, `sk_id` (PK)
+
+**bronze.usuarios** (2 records):
+- `nome_empresa`, `Nome`, `area`, `senioridade`, `gestor`, `email`
+- `canal_1`, `canal_2` ✓ (renomeado de "canal 1", "canal 2")
+- `email_lider`, `sk_id` (PK)
+
+**bronze.faturamento** (2 records):
+- `data`, `receita`, `moeda`, `sk_id` (PK)
+
+**bronze.data** (no PK required - reference table):
+- `data_completa`, `ano`, `mes`, `dia`, `bimestre`, `trimestre`, `quarter`, `semestre`
+
 ## Adding a New CSV Ingestor
 
 1. Create new file in `python/ingestors/csv/ingest_<name>.py`
@@ -144,12 +178,154 @@ Columns starting with `data_` or `dt_` are automatically converted to `YYYY-MM-D
 5. Create corresponding Bronze table in PostgreSQL
 6. Add ingestor instance to `python/run_all_ingestors.py` if it should run with all ingestors
 
+## Silver Layer (Dimensional Model)
+
+The Silver layer implements a **Star Schema** with dimensions and fact tables, applying business rules and data quality transformations.
+
+### Silver Tables
+
+**Dimensions:**
+- `silver.dim_tempo` ✓ **(4,018 registros)**
+  - PK: `sk_data` (integer)
+  - Natural Key: `data_completa` (date, UNIQUE)
+  - Atributos: ano, mes, dia, trimestre, semestre, nome_mes, dia_semana, flags (fim_semana, dia_util, feriado)
+
+- `silver.dim_clientes` ⚠️ **(aguardando transformer)**
+  - PK: `sk_cliente` (integer)
+  - Natural Key: `nk_cnpj_cpf` (varchar, com versioning)
+  - SCD Type 2: `data_inicio`, `data_fim`, `flag_ativo`, `versao`, `hash_registro`, `motivo_mudanca`
+  - UNIQUE: `uk_cliente_cnpj_versao` (nk_cnpj_cpf + versao)
+
+- `silver.dim_usuarios` ⚠️ **(aguardando transformer)**
+  - PK: `sk_usuario` (integer)
+  - Natural Key: `nk_usuario` (varchar, hash ou email)
+  - FK: `sk_gestor` → `dim_usuarios.sk_usuario` (hierarquia self-referencing)
+  - SCD Type 2: `data_inicio`, `data_fim`, `flag_ativo`
+
+- `silver.dim_canal` ✓ **(7 registros)**
+  - PK: `sk_canal` (integer)
+  - Natural Key: `tipo_canal` + `nome_canal` (combinação única)
+  - Atributos: categoria_canal, prioridade, comissao_percentual, meta_mensal
+
+**Facts:**
+- `silver.fact_faturamento` ⚠️ **(aguardando transformer)**
+  - PK: `sk_faturamento` (bigint)
+  - FKs:
+    - `sk_cliente` → `dim_clientes.sk_cliente`
+    - `sk_usuario` → `dim_usuarios.sk_usuario`
+    - `sk_data` → `dim_tempo.sk_data`
+    - `sk_canal` → `dim_canal.sk_canal`
+  - Measures: `valor_bruto`, `valor_liquido`, `valor_desconto`, `valor_imposto`, `valor_comissao`
+  - Degenerate Dimensions: `numero_documento`, `tipo_documento`, `moeda`, `forma_pagamento`, `status_pagamento`
+  - UNIQUE: `uk_fact_faturamento_hash` (hash_transacao para idempotência)
+
+### Star Schema Diagram
+
+```
+                    ┌─────────────────┐
+                    │  dim_tempo      │
+                    │  PK: sk_data    │◄─────┐
+                    │  UK: data_comp  │      │
+                    └─────────────────┘      │
+                                             │
+    ┌─────────────────┐              ┌──────┴──────────────┐
+    │  dim_clientes   │              │ fact_faturamento    │
+    │  PK: sk_cliente │◄─────────────┤ PK: sk_faturamento  │
+    │  UK: cnpj+ver   │              │ FK: sk_data         │
+    │  SCD Type 2     │              │ FK: sk_cliente      │
+    └─────────────────┘              │ FK: sk_usuario      │
+                                     │ FK: sk_canal        │
+    ┌─────────────────┐              │ UK: hash_transacao  │
+    │  dim_usuarios   │              └──────┬──────────────┘
+    │  PK: sk_usuario │◄─────────────────────┘
+    │  FK: sk_gestor ─┼──┐                   │
+    │  SCD Type 2     │  │                   │
+    └─────────────────┘  │                   │
+              ▲          │                   │
+              └──────────┘                   │
+           (hierarquia)                      │
+                                     ┌───────▼──────────┐
+                                     │  dim_canal       │
+                                     │  PK: sk_canal    │
+                                     │  UK: tipo+nome   │
+                                     └──────────────────┘
+```
+
+### Transformer Pattern
+
+All Silver transformers inherit from `BaseSilverTransformer` in `python/transformers/base_transformer.py`. Location: `python/transformers/silver/`
+
+**Required methods (Template Method pattern):**
+- `extrair_bronze(conn)`: Query Bronze tables and return DataFrame
+- `aplicar_transformacoes(df)`: Apply business rules and data quality transformations
+- `validar_qualidade(df)`: Validate data quality, return (success: bool, errors: List[str])
+
+**Provided methods:**
+- `executar()`: Main orchestration (extract → transform → validate → load)
+- `processar_scd2()`: Handle SCD Type 2 logic (detect changes, version records)
+- `calcular_hash_registro()`: Generate MD5 hash for change detection
+
+**Execution:**
+- Run all transformers: `python python/run_silver_transformations.py`
+- Control table `credits.silver_control` tracks last execution timestamps and dependencies
+
+**Implementation Status:**
+- ✓ `BaseTransformer`: Fully implemented with SCD Type 2 support
+- ✓ `dim_tempo`: Pre-loaded (4,018 records)
+- ✓ `dim_canal`: Pre-loaded (7 records)
+- ⚠️ `transform_dim_clientes.py`: Template created, awaiting implementation
+- ⚠️ `transform_dim_usuarios.py`: Template created, awaiting implementation
+- ⚠️ `transform_fact_faturamento.py`: Template created, awaiting implementation
+
+### Bronze to Silver Mapping
+
+| Bronze Table | Records | Silver Table | Records | Transformation Type |
+|--------------|---------|--------------|---------|---------------------|
+| `bronze.data` | N/A | `silver.dim_tempo` | 4,018 ✓ | Enrichment (business calendar) |
+| `bronze.contas_base_oficial` | 8 | `silver.dim_clientes` | 0 ⚠️ | SCD Type 2, data quality, CNPJ/CPF formatting |
+| `bronze.usuarios` | 2 | `silver.dim_usuarios` | 0 ⚠️ | SCD Type 2, hierarchy resolution (gestor) |
+| `bronze.usuarios` | 2 | `silver.dim_canal` | 7 ✓ | Extract & normalize (canal_1, canal_2) |
+| `bronze.faturamento` | 2 | `silver.fact_faturamento` | 0 ⚠️ | FK resolution, measures calculation |
+
+**Transformation Details:**
+- **dim_tempo**: Enriches date with fiscal calendar, holidays, work days flags
+- **dim_clientes**: Standardizes CNPJ/CPF, applies business rules (porte_empresa, categoria_risco, tempo_cliente_dias)
+- **dim_usuarios**: Resolves manager hierarchy (email_lider → sk_gestor FK), splits channel data
+- **dim_canal**: Extracts unique channels from usuarios (canal_1, canal_2), adds commission/targets
+- **fact_faturamento**: Resolves all dimension FKs, calculates derived measures (valor_liquido = valor_bruto - valor_desconto)
+
+### SCD Type 2 Implementation
+
+Dimensions `dim_clientes` and `dim_usuarios` use SCD Type 2:
+- `data_inicio` / `data_fim`: Valid date range
+- `flag_ativo`: Current record indicator (boolean)
+- `versao`: Version number
+- `hash_registro`: MD5 hash for change detection
+- `motivo_mudanca`: Reason for new version
+
 ## Database Configuration
 
 - **Database Type**: PostgreSQL 15 (Azure-hosted)
 - **Connection**: Configured in `docker/docker-compose.yml` and `.env` file
 - **Current Host**: `creditsdw.postgres.database.azure.com`
 - **Timezone**: America/Sao_Paulo
+
+### Database Roles and Permissions
+
+**Roles:**
+- `creditsdw`: ETL service account (CREATEDB, LOGIN) - Full access to all schemas
+- `dw_admin`: Admin role group - Full access to Bronze/Credits, manages grants
+- `dw_developer`: Developer role group - CRUD on all tables (no TRUNCATE on Bronze)
+- `dw_reader`: Read-only role group - SELECT only on all tables
+
+**Grants by Schema:**
+
+| Role | Bronze/Credits | Silver |
+|------|---------------|--------|
+| `creditsdw` | ALL privileges (including TRUNCATE) | ALL privileges |
+| `dw_admin` | ALL privileges | No direct access |
+| `dw_developer` | SELECT, INSERT, UPDATE, DELETE | SELECT, INSERT, UPDATE, DELETE |
+| `dw_reader` | SELECT | SELECT |
 
 ## Python Dependencies
 
