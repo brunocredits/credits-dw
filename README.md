@@ -315,27 +315,15 @@ docker compose exec etl-processor python -u python/transformers/silver/transform
 1. ✅ ~~Bronze Layer implementado~~
 2. ✅ ~~Silver Layer estrutura criada~~
 3. ✅ ~~Transformers implementados~~
-4. ⚠️ **Executar transformers e popular Silver** ← VOCÊ ESTÁ AQUI
+4. ⚠️ **Executar transformers e popular Silver** ← Estamos aqui
 5. 🔜 Validar dados na Silver
 6. 🔜 Conectar BI/Analytics
 7. 🔜 Gold Layer (agregações)
 
----
-
-## 👥 Contato
-
-**Mantido por:** Equipe de Engenharia de Dados - Credits Brasil
-
-**Suporte:** [Adicionar canal de suporte aqui]
-
----
-
-<div align="center">
-
-**Feito com ❤️ pela equipe de Engenharia de Dados**
 
 [![Version](https://img.shields.io/badge/version-3.0-blue.svg)]()
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)]()
 [![PostgreSQL](https://img.shields.io/badge/postgresql-15+-blue.svg)]()
 
 </div>
+
