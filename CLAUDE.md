@@ -348,3 +348,61 @@ DB_PASSWORD=<your_password>
 ```
 
 This file is git-ignored for security.
+
+## Database Improvements Applied
+
+### Fixes Applied (2025-01-10)
+
+**1. Grants para dw_admin na Silver** ✓
+- Problema: dw_admin não tinha acesso à Silver
+- Fix: `GRANT ALL ON ALL TABLES IN SCHEMA silver TO dw_admin;`
+- Status: 35 grants adicionados (7 por tabela x 5 tabelas)
+
+**2. Primary Key em bronze.data** ✓
+- Problema: bronze.data sem PK formal
+- Fix: `ALTER TABLE bronze.data ADD PRIMARY KEY (data_completa);`
+- Impacto: Melhora performance de JOINs, previne duplicatas
+
+### Recommendations for Future
+
+**1. Role Groups vs Users**
+- `dw_admin`, `dw_developer`, `dw_reader` são role groups (NOLOGIN)
+- Para usar: `GRANT dw_developer TO usuario;`
+- Usuários individuais devem receber roles via GRANT
+
+**2. Índices Adicionais (Future)**
+```sql
+-- Melhorar performance de lookups FK
+CREATE INDEX idx_fk_cliente ON silver.fact_faturamento(sk_cliente);
+CREATE INDEX idx_fk_data ON silver.fact_faturamento(sk_data);
+CREATE INDEX idx_fk_usuario ON silver.fact_faturamento(sk_usuario);
+CREATE INDEX idx_fk_canal ON silver.fact_faturamento(sk_canal);
+
+-- Melhorar SCD Type 2 queries
+CREATE INDEX idx_clientes_ativo ON silver.dim_clientes(flag_ativo, nk_cnpj_cpf);
+CREATE INDEX idx_usuarios_ativo ON silver.dim_usuarios(flag_ativo, nk_usuario);
+```
+
+**3. Constraints Validation**
+- Todas FKs estão validadas ✓
+- Todas PKs estão ativas ✓
+- UNIQUE constraints funcionando corretamente ✓
+
+### Performance Considerations
+
+**Bronze Layer:**
+- Sem PKs formais (by design) → menos overhead em TRUNCATE/RELOAD
+- Surrogate keys (sk_id) disponíveis para queries
+- Estratégia TRUNCATE/RELOAD é apropriada para raw data
+
+**Silver Layer:**
+- PKs formais em todas tabelas → garantia de qualidade
+- FKs com integridade referencial → previne órfãos
+- SCD Type 2 com índices em flag_ativo → queries rápidas
+- UNIQUE constraints em hash fields → idempotência
+
+**Recommendation: Índices já criados automaticamente:**
+- PKs → índice B-tree automático
+- FKs → considerar índices manuais se queries lentas (ver acima)
+- UNIQUE → índice B-tree automático
+
