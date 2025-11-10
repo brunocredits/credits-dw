@@ -8,7 +8,7 @@ class TransformDimUsuarios(BaseSilverTransformer):
             script_name='transform_dim_usuarios.py',
             tabela_origem='bronze.usuarios',
             tabela_destino='silver.dim_usuarios',
-            tipo_carga='scd2',
+            tipo_carga='full',  # Mudado de scd2 para full
             chave_natural='nk_usuario'
         )
 

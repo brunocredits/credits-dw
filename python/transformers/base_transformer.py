@@ -156,21 +156,20 @@ class BaseSilverTransformer(ABC):
                 
                 # 5. Carregar na Silver
                 self.logger.info(f"💾 Carregando {len(df_silver)} registros em {self.tabela_destino}...")
-                
-                if self.tipo_carga == 'full':
-                    # Truncate and load
-                    with get_cursor(conn) as cursor:
+
+                with get_cursor(conn) as cursor:
+                    if self.tipo_carga == 'full':
                         cursor.execute(f"TRUNCATE TABLE {self.tabela_destino} CASCADE")
-                
-                # Inserir dados
-                df_silver.to_sql(
-                    self.tabela_destino.split('.')[-1],
-                    conn,
-                    schema='silver',
-                    if_exists='append' if self.tipo_carga != 'full' else 'replace',
-                    index=False,
-                    method='multi'
-                )
+
+                    # Inserir usando psycopg2 diretamente
+                    cols = list(df_silver.columns)
+                    placeholders = ','.join(['%s'] * len(cols))
+                    insert_query = f"INSERT INTO {self.tabela_destino} ({','.join(cols)}) VALUES ({placeholders})"
+
+                    for _, row in df_silver.iterrows():
+                        cursor.execute(insert_query, tuple(row))
+
+                    conn.commit()
                 
                 self.logger.success(f"✅ Transformação concluída com sucesso!")
                 return 0

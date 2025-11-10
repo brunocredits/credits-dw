@@ -263,7 +263,21 @@ credits-dw/
 | Camada | Tabelas | Registros | Status |
 |--------|---------|-----------|--------|
 | **Bronze** | 4 tabelas | 4 clientes<br/>4 usuários<br/>8 transações<br/>4.018 datas | ✅ Operacional |
-| **Silver** | 5 tabelas | dim_tempo: 4.018<br/>dim_canal: 7<br/>Outros: 0 | ⚠️ Aguardando execução de transformers |
+| **Silver** | 5 tabelas | dim_tempo: 4.018<br/>dim_clientes: 4<br/>dim_usuarios: 4<br/>dim_canal: 7<br/>fact_faturamento: 8 | ✅ **Totalmente funcional!** |
+
+### Resumo dos Dados
+
+**Faturamento Total (Dezembro 2024):**
+- 8 transações processadas
+- R$ 38.600,00 receita bruta
+- R$ 38.600,00 receita líquida
+- R$ 1.930,00 em comissões (5%)
+- 1 cliente ativo no período
+
+**Transformações Executadas com Sucesso:**
+- ✅ dim_clientes: 4 registros (CNPJ formatado, SCD Type 2)
+- ✅ dim_usuarios: 4 registros (hierarquia de gestores)
+- ✅ fact_faturamento: 8 registros (métricas calculadas, FKs resolvidas)
 
 ## 🎯 Próximos Passos
 
@@ -271,9 +285,12 @@ credits-dw/
 2. ✅ ~~Scripts de ingestão prontos~~
 3. ✅ ~~Scripts de transformação implementados~~
 4. ✅ ~~Dados de exemplo criados (4+4+8 registros)~~
-5. ⬜ Executar transformers para popular Silver
-6. ⬜ Validar dados transformados
-7. ⬜ Conectar ferramenta de BI (Power BI, Metabase, etc)
+5. ✅ ~~Transformers executados com sucesso~~
+6. ✅ ~~Dados validados na Silver (queries funcionando)~~
+7. ⬜ **Conectar ferramenta de BI (Power BI, Metabase, Superset)**
+8. ⬜ Criar dashboards e visualizações
+9. ⬜ Agendar execução automática (Airflow, cron)
+10. ⬜ Implementar Gold Layer (agregações e KPIs)
 
 ## 🛡️ Segurança e Permissões
 
