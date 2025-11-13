@@ -33,9 +33,15 @@ class IngestUsuarios(BaseCSVIngestor):
         Retorna o mapeamento de colunas do CSV para a tabela Bronze.
         """
         return {
-            'ID_USUARIO': 'sk_id',
-            'NOME_USUARIO': 'Nome',
-            'EMAIL_USUARIO': 'email'
+            'nome_empresa': 'nome_empresa',
+            'Nome': 'Nome',
+            'area': 'area',
+            'senioridade': 'senioridade',
+            'gestor': 'gestor',
+            'email': 'email',
+            'canal 1': 'canal_1',
+            'canal 2': 'canal_2',
+            'email_lider': 'email_lider'
         }
 
     def get_bronze_columns(self) -> List[str]:
@@ -49,10 +55,9 @@ class IngestUsuarios(BaseCSVIngestor):
             'senioridade',
             'gestor',
             'email',
-            'canal 1',
-            'canal 2',
-            'email_lider',
-            'sk_id'
+            'canal_1',
+            'canal_2',
+            'email_lider'
         ]
 
 if __name__ == '__main__':

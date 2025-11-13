@@ -40,7 +40,7 @@ class IngestContasBaseOficial(BaseCSVIngestor):
             'Data de criação': 'data_criacao',
             'Grupo': 'grupo',
             'Razão Social': 'razao_social',
-            'Responsável da Conta': 'resposanvel_conta',
+            'Responsável da Conta': 'responsavel_conta',
             'Financeiro': 'financeiro',
             'Corte': 'corte',
             'Faixa': 'faixa'
@@ -58,7 +58,7 @@ class IngestContasBaseOficial(BaseCSVIngestor):
             'data_criacao',
             'grupo',
             'razao_social',
-            'resposanvel_conta',
+            'responsavel_conta',
             'financeiro',
             'corte',
             'faixa'
