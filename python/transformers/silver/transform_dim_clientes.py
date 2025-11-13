@@ -20,7 +20,12 @@ class TransformDimClientes(BaseSilverTransformer):
         df['tipo_pessoa'] = df['nk_cnpj_cpf'].apply(lambda x: 'PJ' if len(str(x)) > 11 else 'PF')
         df['cnpj_cpf_formatado'] = df['cnpj_cpf']
         df['porte_empresa'] = 'MEDIO'
-        df['tempo_cliente_dias'] = (datetime.now() - pd.to_datetime(df['data_criacao'])).dt.days
+
+        # Calcular tempo como cliente em dias (converter para int)
+        df['data_criacao_dt'] = pd.to_datetime(df['data_criacao'])
+        df['tempo_cliente_dias'] = (datetime.now() - df['data_criacao_dt']).dt.days.fillna(0).astype(int)
+        df.drop('data_criacao_dt', axis=1, inplace=True)
+
         df['categoria_risco'] = 'BAIXO'
 
         df.rename(columns={
