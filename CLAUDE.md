@@ -4,15 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Data Warehouse ETL pipeline** for Credits Brasil that ingests CSV files into a PostgreSQL database using a **Bronze Layer architecture**. The project uses Python 3.10+ scripts orchestrated with Docker to process financial data from various sources.
+This is a **Data Warehouse ETL pipeline** for Credits Brasil that ingests CSV files into a PostgreSQL database using a **Bronze Layer architecture**. The project uses Python scripts orchestrated with Docker to process financial data from various sources.
 
 **Key Architecture Concepts:**
-- **Bronze Layer**: Raw data storage with minimal transformations (only column renaming and type standardization)
-- **Schemas**: `bronze` (raw data tables) and `credits` (ETL metadata/audit tables)
-- **Date Dimension**: `bronze.data` is a pre-calculated date dimension table for performance optimization in time-based queries
-- **Audit Trail**: All ETL executions are tracked in `credits.historico_atualizacoes`
-- **Template Method Pattern**: All ingestors inherit from `BaseCSVIngestor` which provides the execution framework
-- **Configuration**: Centralized in `python/utils/config.py` using dataclasses with environment variable loading
+- **Bronze Layer**: Raw data storage with minimal transformations (only column renaming and type standardization). Tables have surrogate keys (sk_id) but PKs are not strictly required in raw layer. Uses **TRUNCATE/RELOAD** strategy.
+- **Silver Layer**: Dimensional model (Star Schema) with business logic, data quality rules, and SCD Type 2 for historical tracking. Uses **incremental/SCD Type 2** strategy.
+- **Schemas**: `bronze` (raw data), `silver` (dimensional model), and `credits` (ETL metadata/audit tables)
+- **Date Dimension**: `bronze.data` feeds `silver.dim_tempo` - pre-calculated date dimension with business calendar attributes
+- **Audit Trail**: All ETL executions are tracked in `credits.historico_atualizacoes` and Silver loads in `credits.silver_control`
+
+**Current Data Status:**
+- Bronze: ✓ Operational (4 tables with test data: 8 contas, 2 usuarios, 2 faturamento)
+- Silver: ⚠️ Partially loaded (dim_tempo: 4,018 records, dim_canal: 7 records, others awaiting transformers)
 
 ## Common Commands
 
@@ -33,62 +36,38 @@ docker compose exec etl-processor bash
 
 ### Running ETL Scripts
 
+**Bronze Layer (CSV Ingestors):**
 ```bash
-# Execute ALL CSV ingestors at once (sequentially)
+# Execute ALL CSV ingestors at once
 docker compose exec etl-processor python python/run_all_ingestors.py
 
-# Execute in parallel with default workers (3)
-docker compose exec etl-processor python python/run_all_ingestors.py --parallel
-
-# Execute in parallel with custom worker count
-docker compose exec etl-processor python python/run_all_ingestors.py --parallel --workers 5
-
-# Execute specific ingestors only
-docker compose exec etl-processor python python/run_all_ingestors.py --scripts faturamento usuarios
-
-# List available ingestors
-docker compose exec etl-processor python python/run_all_ingestors.py --list
-
-# Execute a specific ingestor directly
+# Execute a specific ingestor
 docker compose exec etl-processor python python/ingestors/csv/ingest_faturamento.py
 docker compose exec etl-processor python python/ingestors/csv/ingest_usuarios.py
 docker compose exec etl-processor python python/ingestors/csv/ingest_contas_base_oficial.py
 ```
 
+**Silver Layer (Transformers):**
+```bash
+# Execute ALL Silver transformations
+docker compose exec etl-processor python python/run_silver_transformations.py
+
+# Execute a specific transformer
+docker compose exec etl-processor python python/transformers/silver/transform_dim_tempo.py
+docker compose exec etl-processor python python/transformers/silver/transform_dim_clientes.py
+```
+
 ### Code Quality
 
 ```bash
-# Format code with Black
+# Format code
 black python/
 
-# Lint code with Ruff
-ruff check python/
+# Lint code
+ruff check .
 
-# Type checking with mypy
+# Type checking
 mypy python/
-
-# Run all quality checks at once
-black python/ && ruff check python/ && mypy python/
-```
-
-### Local Development (Without Docker)
-
-```bash
-# Set up environment
-python3.10 -m venv venv
-source venv/bin/activate  # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set environment variables (ensure .env file exists)
-export $(cat .env | xargs)
-
-# Run a specific ingestor
-PYTHONPATH=. python3 python/ingestors/csv/ingest_faturamento.py
-
-# Or run all ingestors
-PYTHONPATH=. python3 python/run_all_ingestors.py
 ```
 
 ## Architecture & Code Structure
@@ -149,40 +128,15 @@ The `executar()` method in `python/ingestors/csv/base_csv_ingestor.py:215-297` o
 
 - Connection logic in `python/utils/db_connection.py`
 - Credentials loaded from environment variables (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`)
-- Uses **context managers** for automatic resource cleanup
-- Includes **retry logic** with exponential backoff using tenacity
 - Two connection modes:
-  - `get_db_connection()`: Context manager for direct connection (primary method)
+  - `get_db_connection()`: Direct connection (used by ingestors)
   - `get_pooled_connection()`: Connection pooling (available but not currently used)
-  - `get_cursor()`: Context manager for cursor handling
-
-**Example usage:**
-```python
-from utils.db_connection import get_db_connection, get_cursor
-
-# Connection context manager
-with get_db_connection() as conn:
-    with get_cursor(conn) as cursor:
-        cursor.execute("SELECT * FROM bronze.faturamento")
-        results = cursor.fetchall()
-```
 
 ### Audit System
 
 All ETL runs are tracked in `credits.historico_atualizacoes`:
-- `registrar_execucao()`: Logs start with status `'em_execucao'`, returns execution ID
+- `registrar_execucao()`: Logs start with status `'em_execucao'`
 - `finalizar_execucao()`: Updates with final status (`'sucesso'` or `'erro'`), line counts, and error messages
-- Tracks: script name, start/end times, lines processed/inserted, errors, and execution duration
-
-**Key audit fields:**
-- `script_nome`: Name of the ingestor script
-- `camada`: Data warehouse layer ('bronze', 'silver', 'gold')
-- `tabela_origem`: Source table (usually NULL for CSV ingestion)
-- `tabela_destino`: Destination table (e.g., 'bronze.faturamento')
-- `data_inicio` / `data_fim`: Start and end timestamps
-- `status`: 'em_execucao', 'sucesso', or 'erro'
-- `linhas_processadas` / `linhas_inseridas`: Row counts
-- `mensagem_erro`: Error message if status is 'erro'
 
 ### File Paths (Inside Docker Container)
 
@@ -195,80 +149,159 @@ These are mounted from the host `docker/data/` directory.
 
 ### Date Handling
 
-Columns starting with `data_` or `dt_` are automatically converted to `YYYY-MM-DD` format by `_formatar_colunas_data()` in `BaseCSVIngestor`. The method:
-- Detects date columns by name prefix (`data_` or `dt_`)
-- Attempts parsing with multiple date formats
-- Converts valid dates to `YYYY-MM-DD` string format
-- Replaces invalid dates with `None`
-- Logs warnings for unparseable date values
+Columns starting with `data_` or `dt_` are automatically converted to `YYYY-MM-DD` format by `_formatar_colunas_data()` in `python/ingestors/csv/base_csv_ingestor.py:175-195`. Invalid dates are converted to `None`.
 
-This automatic formatting can be disabled by setting `format_dates=False` in the ingestor constructor.
+## Bronze Layer Tables
+
+**bronze.contas_base_oficial** (8 records):
+- `cnpj_cpf`, `tipo`, `status`, `status_qualificação_da_conta`
+- `data_criacao`, `grupo`, `razao_social`, `responsavel_conta` ✓ (typo corrigido de "resposanvel_conta")
+- `financeiro`, `corte`, `faixa`, `sk_id` (PK)
+
+**bronze.usuarios** (2 records):
+- `nome_empresa`, `Nome`, `area`, `senioridade`, `gestor`, `email`
+- `canal_1`, `canal_2` ✓ (renomeado de "canal 1", "canal 2")
+- `email_lider`, `sk_id` (PK)
+
+**bronze.faturamento** (2 records):
+- `data`, `receita`, `moeda`, `sk_id` (PK)
+
+**bronze.data** (no PK required - reference table):
+- `data_completa`, `ano`, `mes`, `dia`, `bimestre`, `trimestre`, `quarter`, `semestre`
 
 ## Adding a New CSV Ingestor
 
-Follow these steps to add a new CSV ingestor to the pipeline:
+1. Create new file in `python/ingestors/csv/ingest_<name>.py`
+2. Implement class inheriting from `BaseCSVIngestor`
+3. Define column mappings and Bronze column list
+4. Add CSV file to `docker/data/input/onedrive/`
+5. Create corresponding Bronze table in PostgreSQL
+6. Add ingestor instance to `python/run_all_ingestors.py` if it should run with all ingestors
 
-1. **Create the ingestor file** in `python/ingestors/csv/ingest_<name>.py`:
-```python
-from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
-from typing import Dict, List
+## Silver Layer (Dimensional Model)
 
-class IngestMyData(BaseCSVIngestor):
-    def __init__(self):
-        super().__init__(
-            script_name='ingest_my_data.py',
-            tabela_destino='bronze.my_data',
-            arquivo_nome='my_data.csv',
-            input_subdir='onedrive'
-        )
+The Silver layer implements a **Star Schema** with dimensions and fact tables, applying business rules and data quality transformations.
 
-    def get_column_mapping(self) -> Dict[str, str]:
-        """Map CSV column names to Bronze table columns"""
-        return {
-            'CSV Column Name': 'bronze_column_name',
-            'Another Column': 'another_column'
-        }
+### Silver Tables
 
-    def get_bronze_columns(self) -> List[str]:
-        """Return Bronze table columns in order"""
-        return ['bronze_column_name', 'another_column']
+**Dimensions:**
+- `silver.dim_tempo` ✓ **(4,018 registros)**
+  - PK: `sk_data` (integer)
+  - Natural Key: `data_completa` (date, UNIQUE)
+  - Atributos: ano, mes, dia, trimestre, semestre, nome_mes, dia_semana, flags (fim_semana, dia_util, feriado)
 
-if __name__ == '__main__':
-    import sys
-    sys.exit(IngestMyData().executar())
+- `silver.dim_clientes` ⚠️ **(aguardando transformer)**
+  - PK: `sk_cliente` (integer)
+  - Natural Key: `nk_cnpj_cpf` (varchar, com versioning)
+  - SCD Type 2: `data_inicio`, `data_fim`, `flag_ativo`, `versao`, `hash_registro`, `motivo_mudanca`
+  - UNIQUE: `uk_cliente_cnpj_versao` (nk_cnpj_cpf + versao)
+
+- `silver.dim_usuarios` ⚠️ **(aguardando transformer)**
+  - PK: `sk_usuario` (integer)
+  - Natural Key: `nk_usuario` (varchar, hash ou email)
+  - FK: `sk_gestor` → `dim_usuarios.sk_usuario` (hierarquia self-referencing)
+  - SCD Type 2: `data_inicio`, `data_fim`, `flag_ativo`
+
+- `silver.dim_canal` ✓ **(7 registros)**
+  - PK: `sk_canal` (integer)
+  - Natural Key: `tipo_canal` + `nome_canal` (combinação única)
+  - Atributos: categoria_canal, prioridade, comissao_percentual, meta_mensal
+
+**Facts:**
+- `silver.fact_faturamento` ⚠️ **(aguardando transformer)**
+  - PK: `sk_faturamento` (bigint)
+  - FKs:
+    - `sk_cliente` → `dim_clientes.sk_cliente`
+    - `sk_usuario` → `dim_usuarios.sk_usuario`
+    - `sk_data` → `dim_tempo.sk_data`
+    - `sk_canal` → `dim_canal.sk_canal`
+  - Measures: `valor_bruto`, `valor_liquido`, `valor_desconto`, `valor_imposto`, `valor_comissao`
+  - Degenerate Dimensions: `numero_documento`, `tipo_documento`, `moeda`, `forma_pagamento`, `status_pagamento`
+  - UNIQUE: `uk_fact_faturamento_hash` (hash_transacao para idempotência)
+
+### Star Schema Diagram
+
+```
+                    ┌─────────────────┐
+                    │  dim_tempo      │
+                    │  PK: sk_data    │◄─────┐
+                    │  UK: data_comp  │      │
+                    └─────────────────┘      │
+                                             │
+    ┌─────────────────┐              ┌──────┴──────────────┐
+    │  dim_clientes   │              │ fact_faturamento    │
+    │  PK: sk_cliente │◄─────────────┤ PK: sk_faturamento  │
+    │  UK: cnpj+ver   │              │ FK: sk_data         │
+    │  SCD Type 2     │              │ FK: sk_cliente      │
+    └─────────────────┘              │ FK: sk_usuario      │
+                                     │ FK: sk_canal        │
+    ┌─────────────────┐              │ UK: hash_transacao  │
+    │  dim_usuarios   │              └──────┬──────────────┘
+    │  PK: sk_usuario │◄─────────────────────┘
+    │  FK: sk_gestor ─┼──┐                   │
+    │  SCD Type 2     │  │                   │
+    └─────────────────┘  │                   │
+              ▲          │                   │
+              └──────────┘                   │
+           (hierarquia)                      │
+                                     ┌───────▼──────────┐
+                                     │  dim_canal       │
+                                     │  PK: sk_canal    │
+                                     │  UK: tipo+nome   │
+                                     └──────────────────┘
 ```
 
-2. **Create the Bronze table** in PostgreSQL:
-```sql
-CREATE TABLE bronze.my_data (
-    bronze_column_name TEXT,
-    another_column TEXT,
-    data_carga_bronze TIMESTAMP DEFAULT NOW()
-);
-```
+### Transformer Pattern
 
-3. **Register in orchestrator** (`python/run_all_ingestors.py`):
-```python
-from ingestors.csv.ingest_my_data import IngestMyData
+All Silver transformers inherit from `BaseSilverTransformer` in `python/transformers/base_transformer.py`. Location: `python/transformers/silver/`
 
-INGESTORS_REGISTRY = {
-    'contas': IngestContasBaseOficial,
-    'faturamento': IngestFaturamento,
-    'usuarios': IngestUsuarios,
-    'my_data': IngestMyData,  # Add here
-}
-```
+**Required methods (Template Method pattern):**
+- `extrair_bronze(conn)`: Query Bronze tables and return DataFrame
+- `aplicar_transformacoes(df)`: Apply business rules and data quality transformations
+- `validar_qualidade(df)`: Validate data quality, return (success: bool, errors: List[str])
 
-4. **Add CSV file** to `docker/data/input/onedrive/my_data.csv`
+**Provided methods:**
+- `executar()`: Main orchestration (extract → transform → validate → load)
+- `processar_scd2()`: Handle SCD Type 2 logic (detect changes, version records)
+- `calcular_hash_registro()`: Generate MD5 hash for change detection
 
-5. **Test the ingestor**:
-```bash
-# Test individual ingestor
-docker compose exec etl-processor python python/ingestors/csv/ingest_my_data.py
+**Execution:**
+- Run all transformers: `python python/run_silver_transformations.py`
+- Control table `credits.silver_control` tracks last execution timestamps and dependencies
 
-# Test with orchestrator
-docker compose exec etl-processor python python/run_all_ingestors.py --scripts my_data
-```
+**Implementation Status:**
+- ✓ `BaseTransformer`: Fully implemented with SCD Type 2 support
+- ✓ `dim_tempo`: Pre-loaded (4,018 records)
+- ✓ `dim_canal`: Pre-loaded (7 records)
+- ⚠️ `transform_dim_clientes.py`: Template created, awaiting implementation
+- ⚠️ `transform_dim_usuarios.py`: Template created, awaiting implementation
+- ⚠️ `transform_fact_faturamento.py`: Template created, awaiting implementation
+
+### Bronze to Silver Mapping
+
+| Bronze Table | Records | Silver Table | Records | Transformation Type |
+|--------------|---------|--------------|---------|---------------------|
+| `bronze.data` | N/A | `silver.dim_tempo` | 4,018 ✓ | Enrichment (business calendar) |
+| `bronze.contas_base_oficial` | 8 | `silver.dim_clientes` | 0 ⚠️ | SCD Type 2, data quality, CNPJ/CPF formatting |
+| `bronze.usuarios` | 2 | `silver.dim_usuarios` | 0 ⚠️ | SCD Type 2, hierarchy resolution (gestor) |
+| `bronze.usuarios` | 2 | `silver.dim_canal` | 7 ✓ | Extract & normalize (canal_1, canal_2) |
+| `bronze.faturamento` | 2 | `silver.fact_faturamento` | 0 ⚠️ | FK resolution, measures calculation |
+
+**Transformation Details:**
+- **dim_tempo**: Enriches date with fiscal calendar, holidays, work days flags
+- **dim_clientes**: Standardizes CNPJ/CPF, applies business rules (porte_empresa, categoria_risco, tempo_cliente_dias)
+- **dim_usuarios**: Resolves manager hierarchy (email_lider → sk_gestor FK), splits channel data
+- **dim_canal**: Extracts unique channels from usuarios (canal_1, canal_2), adds commission/targets
+- **fact_faturamento**: Resolves all dimension FKs, calculates derived measures (valor_liquido = valor_bruto - valor_desconto)
+
+### SCD Type 2 Implementation
+
+Dimensions `dim_clientes` and `dim_usuarios` use SCD Type 2:
+- `data_inicio` / `data_fim`: Valid date range
+- `flag_ativo`: Current record indicator (boolean)
+- `versao`: Version number
+- `hash_registro`: MD5 hash for change detection
+- `motivo_mudanca`: Reason for new version
 
 ## Database Configuration
 
@@ -277,108 +310,99 @@ docker compose exec etl-processor python python/run_all_ingestors.py --scripts m
 - **Current Host**: `creditsdw.postgres.database.azure.com`
 - **Timezone**: America/Sao_Paulo
 
+### Database Roles and Permissions
+
+**Roles:**
+- `creditsdw`: ETL service account (CREATEDB, LOGIN) - Full access to all schemas
+- `dw_admin`: Admin role group - Full access to Bronze/Credits, manages grants
+- `dw_developer`: Developer role group - CRUD on all tables (no TRUNCATE on Bronze)
+- `dw_reader`: Read-only role group - SELECT only on all tables
+
+**Grants by Schema:**
+
+| Role | Bronze/Credits | Silver |
+|------|---------------|--------|
+| `creditsdw` | ALL privileges (including TRUNCATE) | ALL privileges |
+| `dw_admin` | ALL privileges | No direct access |
+| `dw_developer` | SELECT, INSERT, UPDATE, DELETE | SELECT, INSERT, UPDATE, DELETE |
+| `dw_reader` | SELECT | SELECT |
+
 ## Python Dependencies
 
 Key packages (from `requirements.txt`):
-- `pandas==2.1.4` - Data processing and CSV handling
+- `pandas==2.1.4` - Data processing
 - `psycopg2-binary==2.9.9` - PostgreSQL driver
-- `loguru==0.7.2` - Advanced logging with rotation and colors
-- `tenacity` - Retry logic with exponential backoff
-- `black`, `ruff`, `mypy` - Code quality and formatting tools
-- `pytest`, `pytest-cov` - Testing framework (tests not yet implemented)
+- `loguru==0.7.2` - Logging (though code uses standard logging)
+- `black`, `ruff`, `mypy` - Code quality tools
+- `pytest`, `pytest-cov` - Testing
 
 ## Environment File
 
-The `.env` file in project root must contain these required variables:
-```bash
-# Required Database Configuration
-DB_HOST=your_host.postgres.database.azure.com
-DB_PORT=5432
-DB_NAME=creditsdw
-DB_USER=your_user
-DB_PASSWORD=your_password
-
-# Optional Configuration (with defaults)
-LOG_LEVEL=INFO                    # DEBUG, INFO, WARNING, ERROR
-ETL_MAX_RETRIES=3                 # Number of retry attempts
-ETL_RETRY_DELAY=5                 # Seconds between retries
-ETL_BATCH_SIZE=1000               # Rows per batch insert
-ETL_PARALLEL_INGESTORS=1          # Workers for parallel execution
-CSV_SEPARATOR=;                   # CSV delimiter
-CSV_ENCODING=utf-8-sig            # CSV encoding (handles BOM)
-CSV_CHUNK_SIZE=10000              # Rows per chunk when reading
-ENVIRONMENT=development           # development/staging/production
+The `.env` file in project root must contain:
+```
+DB_HOST=<your_host>
+DB_PORT=<your_port>
+DB_NAME=<your_database>
+DB_USER=<your_user>
+DB_PASSWORD=<your_password>
 ```
 
-This file is git-ignored for security. Use `.env.example` as a template.
+This file is git-ignored for security.
 
-## Logging and Monitoring
+## Database Improvements Applied
 
-The project uses **Loguru** for advanced logging capabilities:
+### Fixes Applied (2025-01-10)
 
-- **Log Location**: `/app/logs/` (inside container) or `docker/logs/` (host)
-- **Log Files**: Named `{script_name}.log`
-- **Rotation**: Automatic at 100 MB
-- **Retention**: 30 days
-- **Compression**: Old logs compressed to `.zip`
-- **Format**: Timestamp, level, module, function, line, and message
+**1. Grants para dw_admin na Silver** ✓
+- Problema: dw_admin não tinha acesso à Silver
+- Fix: `GRANT ALL ON ALL TABLES IN SCHEMA silver TO dw_admin;`
+- Status: 35 grants adicionados (7 por tabela x 5 tabelas)
 
-**Key logging functions** in `python/utils/logger.py`:
-- `setup_logger(name)`: Initialize logger for a script
-- `log_dataframe_info(df, nome)`: Log DataFrame statistics (shape, columns, memory, nulls)
-- `log_execution_summary(...)`: Log execution results with metrics
+**2. Primary Key em bronze.data** ✓
+- Problema: bronze.data sem PK formal
+- Fix: `ALTER TABLE bronze.data ADD PRIMARY KEY (data_completa);`
+- Impacto: Melhora performance de JOINs, previne duplicatas
 
-**Log levels** (set via `LOG_LEVEL` env var):
-- `DEBUG`: Detailed diagnostic information
-- `INFO`: General informational messages (default)
-- `WARNING`: Warning messages for potential issues
-- `ERROR`: Error messages for failures
+### Recommendations for Future
 
-## Configuration System
+**1. Role Groups vs Users**
+- `dw_admin`, `dw_developer`, `dw_reader` são role groups (NOLOGIN)
+- Para usar: `GRANT dw_developer TO usuario;`
+- Usuários individuais devem receber roles via GRANT
 
-The project uses centralized configuration in `python/utils/config.py`:
+**2. Índices Adicionais (Future)**
+```sql
+-- Melhorar performance de lookups FK
+CREATE INDEX idx_fk_cliente ON silver.fact_faturamento(sk_cliente);
+CREATE INDEX idx_fk_data ON silver.fact_faturamento(sk_data);
+CREATE INDEX idx_fk_usuario ON silver.fact_faturamento(sk_usuario);
+CREATE INDEX idx_fk_canal ON silver.fact_faturamento(sk_canal);
 
-**Key configuration classes:**
-- `DatabaseConfig`: Database connection settings
-- `CSVConfig`: CSV parsing defaults
-- `PathsConfig`: File system paths
-- `ETLConfig`: ETL process settings
-- `Config`: Main configuration container (singleton)
-
-**Usage in code:**
-```python
-from utils.config import get_config, get_db_config, get_etl_config
-
-# Get full config
-config = get_config()
-print(config.database.host)
-print(config.etl.batch_insert_size)
-
-# Get specific config sections
-db_config = get_db_config()
-etl_config = get_etl_config()
+-- Melhorar SCD Type 2 queries
+CREATE INDEX idx_clientes_ativo ON silver.dim_clientes(flag_ativo, nk_cnpj_cpf);
+CREATE INDEX idx_usuarios_ativo ON silver.dim_usuarios(flag_ativo, nk_usuario);
 ```
 
-The configuration automatically:
-- Validates required environment variables
-- Provides sensible defaults
-- Detects Docker vs local environment
-- Uses singleton pattern for consistency
+**3. Constraints Validation**
+- Todas FKs estão validadas ✓
+- Todas PKs estão ativas ✓
+- UNIQUE constraints funcionando corretamente ✓
 
-## Important Implementation Notes
+### Performance Considerations
 
-1. **TRUNCATE/RELOAD Strategy**: Bronze tables are completely replaced on each run, not incrementally loaded. This means `inserir_bronze()` method in `BaseCSVIngestor` uses `TRUNCATE TABLE` before inserting new data.
+**Bronze Layer:**
+- Sem PKs formais (by design) → menos overhead em TRUNCATE/RELOAD
+- Surrogate keys (sk_id) disponíveis para queries
+- Estratégia TRUNCATE/RELOAD é apropriada para raw data
 
-2. **CSV Encoding**: The default encoding is `utf-8-sig` which handles UTF-8 files with BOM (Byte Order Mark) commonly created by Excel.
+**Silver Layer:**
+- PKs formais em todas tabelas → garantia de qualidade
+- FKs com integridade referencial → previne órfãos
+- SCD Type 2 com índices em flag_ativo → queries rápidas
+- UNIQUE constraints em hash fields → idempotência
 
-3. **All Strings**: CSV data is initially read with `dtype=str` to preserve original formats. Type conversions happen during transformation.
+**Recommendation: Índices já criados automaticamente:**
+- PKs → índice B-tree automático
+- FKs → considerar índices manuais se queries lentas (ver acima)
+- UNIQUE → índice B-tree automático
 
-4. **Batch Inserts**: For performance, inserts use `executemany()` with configurable batch sizes (default 1000 rows).
-
-5. **File Archival**: Successfully processed CSV files are moved to `/app/data/processed/` with a timestamp suffix to prevent reprocessing.
-
-6. **Error Handling**: All errors are logged to both console and file, and recorded in the audit table with full error messages.
-
-7. **Resource Management**: All database connections and cursors use context managers to ensure proper cleanup even if errors occur.
-
-8. **Parallel Execution**: When using `--parallel` mode, ingestors run in separate threads (not processes), sharing the same database connection pool.
