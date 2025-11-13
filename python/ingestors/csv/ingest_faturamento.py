@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List
 
 # Adicionar diretório raiz ao path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 
@@ -47,6 +47,12 @@ class IngestFaturamento(BaseCSVIngestor):
             'receita',
             'moeda'
         ]
+
+    def get_date_columns(self) -> List[str]:
+        """
+        Retorna lista de colunas que devem ser formatadas como data.
+        """
+        return ['data']
 
 if __name__ == '__main__':
     ingestor = IngestFaturamento()

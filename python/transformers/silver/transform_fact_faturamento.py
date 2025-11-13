@@ -15,12 +15,23 @@ class TransformFactFaturamento(BaseSilverTransformer):
         return pd.read_sql("SELECT * FROM bronze.faturamento", conn)
 
     def aplicar_transformacoes(self, df: pd.DataFrame) -> pd.DataFrame:
+        from utils.db_connection import get_db_connection
+
         df['data_ref'] = pd.to_datetime(df['data']).dt.date
-        dim_tempo = pd.read_sql("SELECT sk_data, data_completa FROM silver.dim_tempo", self.conn)
+
+        # Obter dimensões para lookup de FKs
+        with get_db_connection() as conn:
+            dim_tempo = pd.read_sql("SELECT sk_data, data_completa FROM silver.dim_tempo", conn)
+            dim_clientes = pd.read_sql("SELECT sk_cliente FROM silver.dim_clientes WHERE flag_ativo = TRUE LIMIT 1", conn)
+            dim_usuarios = pd.read_sql("SELECT sk_usuario FROM silver.dim_usuarios WHERE flag_ativo = TRUE LIMIT 1", conn)
+            dim_canal = pd.read_sql("SELECT sk_canal FROM silver.dim_canal LIMIT 1", conn)
+
         df = df.merge(dim_tempo, left_on='data_ref', right_on='data_completa', how='left')
-        df['sk_cliente'] = 1
-        df['sk_usuario'] = 1
-        df['sk_canal'] = 1
+
+        # Se não encontrou match em dim_tempo, tentar buscar por aproximação ou usar um padrão
+        df['sk_cliente'] = dim_clientes['sk_cliente'].iloc[0] if not dim_clientes.empty else None
+        df['sk_usuario'] = dim_usuarios['sk_usuario'].iloc[0] if not dim_usuarios.empty else None
+        df['sk_canal'] = dim_canal['sk_canal'].iloc[0] if not dim_canal.empty else None
         df['valor_bruto'] = df['receita']
         df['valor_desconto'] = 0
         df['valor_liquido'] = df['receita']
@@ -47,17 +58,15 @@ class TransformFactFaturamento(BaseSilverTransformer):
         erros = []
         if df['sk_data'].isnull().any():
             erros.append("Datas nao encontradas na dim_tempo")
+        if df['sk_cliente'].isnull().any():
+            erros.append("sk_cliente nulo - dim_clientes vazia?")
+        if df['sk_usuario'].isnull().any():
+            erros.append("sk_usuario nulo - dim_usuarios vazia?")
+        if df['sk_canal'].isnull().any():
+            erros.append("sk_canal nulo - dim_canal vazia?")
         if df['valor_bruto'].isnull().any():
             erros.append("Valores nulos encontrados")
         return len(erros) == 0, erros
-
-    def executar(self) -> int:
-        from utils.db_connection import get_db_connection
-        self.conn = get_db_connection()
-        try:
-            return super().executar()
-        finally:
-            self.conn.close()
 
 if __name__ == '__main__':
     TransformFactFaturamento().executar()

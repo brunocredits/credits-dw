@@ -112,14 +112,24 @@ class BaseSilverTransformer(ABC):
                 """
                 with get_cursor(conn) as cursor:
                     cursor.execute(query_update, (nk,))
-            
+
             # Preparar novos registros versionados
             alterados['data_inicio'] = datetime.now().date()
             alterados['data_fim'] = None
             alterados['flag_ativo'] = True
             alterados['versao'] = alterados['versao'] + 1
-        
-        return pd.concat([novos, alterados], ignore_index=True)
+
+        # Concatenar novos e alterados
+        df_result = pd.concat([novos, alterados], ignore_index=True)
+
+        # Remover sufixos _novo e _atual das colunas
+        df_result.columns = df_result.columns.str.replace('_novo$', '', regex=True)
+        df_result.columns = df_result.columns.str.replace('_atual$', '', regex=True)
+
+        # Remover colunas duplicadas (manter apenas uma versão)
+        df_result = df_result.loc[:, ~df_result.columns.duplicated()]
+
+        return df_result
     
     def executar(self) -> int:
         """
@@ -161,13 +171,24 @@ class BaseSilverTransformer(ABC):
                     if self.tipo_carga == 'full':
                         cursor.execute(f"TRUNCATE TABLE {self.tabela_destino} CASCADE")
 
-                    # Inserir usando psycopg2 diretamente
-                    cols = list(df_silver.columns)
+                    # Remover apenas o PK autoincrement (sk_faturamento, sk_cliente_id na própria tabela, etc)
+                    # Manter FKs (sk_cliente, sk_usuario, sk_data, sk_canal são FKs, não PKs)
+                    tabela_nome = self.tabela_destino.split('.')[-1]  # fact_faturamento
+                    pk_col_name = f"sk_{tabela_nome.replace('fact_', '').replace('dim_', '')}"  # sk_faturamento
+
+                    cols = [c for c in df_silver.columns if c != pk_col_name]
+                    df_to_insert = df_silver[cols]
+
                     placeholders = ','.join(['%s'] * len(cols))
                     insert_query = f"INSERT INTO {self.tabela_destino} ({','.join(cols)}) VALUES ({placeholders})"
 
-                    for _, row in df_silver.iterrows():
-                        cursor.execute(insert_query, tuple(row))
+                    for idx, row in df_to_insert.iterrows():
+                        try:
+                            cursor.execute(insert_query, tuple(row))
+                        except Exception as e:
+                            self.logger.error(f"Erro ao inserir linha {idx}: {e}")
+                            self.logger.error(f"Valores: {dict(row)}")
+                            raise
 
                     conn.commit()
                 
