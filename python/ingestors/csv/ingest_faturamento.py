@@ -48,6 +48,12 @@ class IngestFaturamento(BaseCSVIngestor):
             'moeda'
         ]
 
+    def get_date_columns(self) -> List[str]:
+        """
+        Retorna lista de colunas que devem ser formatadas como data.
+        """
+        return ['data']
+
 if __name__ == '__main__':
     ingestor = IngestFaturamento()
     sys.exit(ingestor.executar())
