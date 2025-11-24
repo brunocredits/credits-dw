@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""
-Script: run_all_ingestors.py
-Descrição: Executa todos os ingestores CSV com suporte a paralelização e métricas
-Versão: 2.0
-
-Uso:
-    python run_all_ingestors.py                    # Executa todos sequencialmente
-    python run_all_ingestors.py --parallel         # Executa em paralelo
-    python run_all_ingestors.py --scripts faturamento usuarios  # Executa apenas alguns
-"""
 
 import sys
 import argparse
