@@ -6,8 +6,8 @@ from utils.db_connection import get_cursor
 
 def registrar_execucao(conn, script_nome: str, camada: str,
                        tabela_origem: Optional[str] = None,
-                       tabela_destino: Optional[str] = None) -> int:
-    """Registra início de execução ETL"""
+                       tabela_destino: Optional[str] = None) -> str:
+    """Registra início de execução ETL. Retorna UUID como string"""
     query = """
         INSERT INTO credits.historico_atualizacoes
         (script_nome, camada, tabela_origem, tabela_destino, data_inicio, status)
@@ -16,9 +16,9 @@ def registrar_execucao(conn, script_nome: str, camada: str,
     with get_cursor(conn) as cur:
         cur.execute(query, (script_nome, camada, tabela_origem, tabela_destino,
                            datetime.now(), 'em_execucao'))
-        return cur.fetchone()[0]
+        return str(cur.fetchone()[0])
 
-def finalizar_execucao(conn, execucao_id: int, status: str,
+def finalizar_execucao(conn, execucao_id: str, status: str,
                        linhas_processadas: int = 0, linhas_inseridas: int = 0,
                        linhas_atualizadas: int = 0, linhas_erro: int = 0,
                        mensagem_erro: Optional[str] = None) -> None:

@@ -19,6 +19,9 @@ TABELAS_SILVER_PERMITIDAS = {
     'silver.dim_clientes', 'silver.dim_usuarios', 'silver.dim_tempo',
     'silver.dim_canal', 'silver.fact_faturamento'
 }
+TABELAS_CONTROLE_PERMITIDAS = {
+    'credits.historico_atualizacoes', 'credits.silver_control'
+}
 
 class BaseSilverTransformer(ABC):
     """Template Method pattern para transformações Silver"""
