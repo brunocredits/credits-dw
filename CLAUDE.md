@@ -14,8 +14,8 @@ This is a **Data Warehouse ETL pipeline** for Credits Brasil that ingests CSV fi
 - **Audit Trail**: All ETL executions are tracked in `credits.historico_atualizacoes` and Silver loads in `credits.silver_control`
 
 **Current Data Status:**
-- Bronze: ✓ Operational (4 tables with test data: 8 contas, 2 usuarios, 2 faturamento)
-- Silver: ⚠️ Partially loaded (dim_tempo: 4,018 records, dim_canal: 7 records, others awaiting transformers)
+- Bronze: ✓ Operational (4 tables with test data: 6 contas, 6 usuarios, 9 faturamento, 4,018 datas)
+- Silver: ✅ Fully loaded (dim_tempo: 4,018 records, dim_canal: 7 records, dim_clientes: 9, dim_usuarios: 5, fact_faturamento: 9)
 
 ## Common Commands
 
@@ -200,18 +200,18 @@ Colunas nomeadas como `data_*` ou `dt_*` são automaticamente formatadas para `Y
 
 ## Bronze Layer Tables
 
-**bronze.contas_base_oficial** (8 records):
+**bronze.contas_base_oficial** (6 records):
 - `cnpj_cpf`, `tipo`, `status`, `status_qualificação_da_conta`
 - `data_criacao`, `grupo`, `razao_social`, `responsavel_conta` ✓ (typo corrigido de "resposanvel_conta")
 - `financeiro`, `corte`, `faixa`, `sk_id` (PK)
 
-**bronze.usuarios** (2 records):
+**bronze.usuarios** (6 records):
 - `nome_empresa`, `Nome`, `area`, `senioridade`, `gestor`, `email`
 - `canal_1`, `canal_2` ✓ (renomeado de "canal 1", "canal 2")
 - `email_lider`, `sk_id` (PK)
 
-**bronze.faturamento** (2 records):
-- `data`, `receita`, `moeda`, `sk_id` (PK)
+**bronze.faturamento** (9 records):
+- `data`, `receita`, `moeda`, `cnpj_cliente`, `email_usuario`, `sk_id` (PK)
 
 **bronze.data** (no PK required - reference table):
 - `data_completa`, `ano`, `mes`, `dia`, `bimestre`, `trimestre`, `quarter`, `semestre`
@@ -317,22 +317,22 @@ All Silver transformers inherit from `BaseSilverTransformer` in `python/transfor
 - Control table `credits.silver_control` tracks last execution timestamps and dependencies
 
 **Implementation Status:**
-- ✓ `BaseTransformer`: Fully implemented with SCD Type 2 support
-- ✓ `dim_tempo`: Pre-loaded (4,018 records)
-- ✓ `dim_canal`: Pre-loaded (7 records)
-- ⚠️ `transform_dim_clientes.py`: Template created, awaiting implementation
-- ⚠️ `transform_dim_usuarios.py`: Template created, awaiting implementation
-- ⚠️ `transform_fact_faturamento.py`: Template created, awaiting implementation
+- ✅ `BaseTransformer`: Fully implemented with SCD Type 2 support
+- ✅ `transform_dim_tempo.py`: Fully implemented with calendar enrichment
+- ✅ `transform_dim_canal.py`: Fully implemented
+- ✅ `transform_dim_clientes.py`: Fully implemented with SCD Type 2
+- ✅ `transform_dim_usuarios.py`: Fully implemented with SCD Type 2 and hierarchy resolution
+- ✅ `transform_fact_faturamento.py`: Fully implemented with FK validation
 
 ### Bronze to Silver Mapping
 
 | Bronze Table | Records | Silver Table | Records | Transformation Type |
 |--------------|---------|--------------|---------|---------------------|
-| `bronze.data` | N/A | `silver.dim_tempo` | 4,018 ✓ | Enrichment (business calendar) |
-| `bronze.contas_base_oficial` | 8 | `silver.dim_clientes` | 0 ⚠️ | SCD Type 2, data quality, CNPJ/CPF formatting |
-| `bronze.usuarios` | 2 | `silver.dim_usuarios` | 0 ⚠️ | SCD Type 2, hierarchy resolution (gestor) |
-| `bronze.usuarios` | 2 | `silver.dim_canal` | 7 ✓ | Extract & normalize (canal_1, canal_2) |
-| `bronze.faturamento` | 2 | `silver.fact_faturamento` | 0 ⚠️ | FK resolution, measures calculation |
+| `bronze.data` | 4,018 | `silver.dim_tempo` | 4,018 ✅ | Enrichment (business calendar) |
+| `bronze.contas_base_oficial` | 6 | `silver.dim_clientes` | 9 ✅ | SCD Type 2, data quality, CNPJ/CPF formatting |
+| `bronze.usuarios` | 6 | `silver.dim_usuarios` | 5 ✅ | SCD Type 2, hierarchy resolution (gestor) |
+| `bronze.usuarios` | 6 | `silver.dim_canal` | 7 ✅ | Extract & normalize (canal_1, canal_2) |
+| `bronze.faturamento` | 9 | `silver.fact_faturamento` | 9 ✅ | FK resolution, measures calculation |
 
 **Transformation Details:**
 - **dim_tempo**: Enriches date with fiscal calendar, holidays, work days flags

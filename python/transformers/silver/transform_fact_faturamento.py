@@ -111,33 +111,83 @@ class TransformFactFaturamento(BaseSilverTransformer):
         return df[cols]
 
     def validar_qualidade(self, df: pd.DataFrame):
+        """
+        Valida qualidade dos dados da fact_faturamento.
+
+        Validações CRÍTICAS (bloqueiam execução):
+        - sk_data obrigatório (fato sem data não faz sentido)
+        - sk_cliente obrigatório (fato órfão sem cliente)
+        - sk_usuario obrigatório (fato sem responsável)
+        - valor_bruto obrigatório e > 0
+
+        Validações INFORMATIVAS (apenas warnings):
+        - sk_canal pode ser nulo (será atribuído canal padrão)
+        """
         erros = []
         warnings = []
 
-        # Validações críticas (bloqueiam)
+        # === VALIDAÇÕES CRÍTICAS (BLOQUEIAM) ===
+
+        # 1. SK_DATA: Obrigatório
         if df['sk_data'].isnull().any():
             count = df['sk_data'].isnull().sum()
-            erros.append(f"{count} datas não encontradas na dim_tempo")
+            total = len(df)
+            erros.append(f"ERRO CRÍTICO: {count}/{total} registros sem sk_data (datas não encontradas na dim_tempo)")
+            self.logger.error(f"❌ {count} registros sem data válida")
 
-        if df['valor_bruto'].isnull().any():
-            count = df['valor_bruto'].isnull().sum()
-            erros.append(f"{count} valores brutos nulos ou inválidos")
-
-        # Validações importantes (warnings)
+        # 2. SK_CLIENTE: Obrigatório para integridade do modelo
         if df['sk_cliente'].isnull().any():
             count = df['sk_cliente'].isnull().sum()
             total = len(df)
-            warnings.append(f"AVISO: {count}/{total} registros sem sk_cliente (CNPJs não encontrados)")
+            erros.append(f"ERRO CRÍTICO: {count}/{total} registros sem sk_cliente (CNPJs não encontrados na dim_clientes)")
+            self.logger.error(f"❌ {count} registros sem cliente válido")
 
+            # Logar detalhes dos CNPJs órfãos para debugging
+            if 'cnpj_limpo' in df.columns:
+                cnpjs_orfaos = df[df['sk_cliente'].isnull()]['cnpj_limpo'].unique()
+                self.logger.error(f"   CNPJs órfãos: {list(cnpjs_orfaos)[:10]}")  # Mostrar até 10
+
+        # 3. SK_USUARIO: Obrigatório para rastreabilidade
         if df['sk_usuario'].isnull().any():
             count = df['sk_usuario'].isnull().sum()
             total = len(df)
-            warnings.append(f"AVISO: {count}/{total} registros sem sk_usuario (emails não encontrados)")
+            erros.append(f"ERRO CRÍTICO: {count}/{total} registros sem sk_usuario (emails não encontrados na dim_usuarios)")
+            self.logger.error(f"❌ {count} registros sem usuário válido")
 
-        # Logar warnings
+            # Logar detalhes dos emails órfãos
+            if 'email_limpo' in df.columns:
+                emails_orfaos = df[df['sk_usuario'].isnull()]['email_limpo'].unique()
+                self.logger.error(f"   Emails órfãos: {list(emails_orfaos)[:10]}")
+
+        # 4. VALOR_BRUTO: Obrigatório e deve ser > 0
+        if df['valor_bruto'].isnull().any():
+            count = df['valor_bruto'].isnull().sum()
+            erros.append(f"ERRO CRÍTICO: {count} valores brutos nulos ou inválidos")
+
+        if (df['valor_bruto'] <= 0).any():
+            count = (df['valor_bruto'] <= 0).sum()
+            erros.append(f"ERRO CRÍTICO: {count} valores brutos <= 0 (valor inválido)")
+
+        # === VALIDAÇÕES INFORMATIVAS (WARNINGS) ===
+
+        # SK_CANAL: Pode ser nulo (será atribuído canal padrão)
+        if df['sk_canal'].isnull().any():
+            count = df['sk_canal'].isnull().sum()
+            total = len(df)
+            warnings.append(f"INFO: {count}/{total} registros sem sk_canal (será atribuído canal padrão)")
+
+        # Estatísticas de qualidade
+        if not erros:
+            self.logger.info("✅ Validações de qualidade aprovadas:")
+            self.logger.info(f"   • Total de registros: {len(df):,}")
+            self.logger.info(f"   • Registros com FKs válidas: {len(df):,}")
+            self.logger.info(f"   • Valor total: R$ {df['valor_bruto'].sum():,.2f}")
+            self.logger.info(f"   • Valor médio: R$ {df['valor_bruto'].mean():,.2f}")
+
+        # Logar warnings (não bloqueiam)
         if warnings:
             for warning in warnings:
-                self.logger.warning(warning)
+                self.logger.warning(f"⚠️ {warning}")
 
         return len(erros) == 0, erros
 
