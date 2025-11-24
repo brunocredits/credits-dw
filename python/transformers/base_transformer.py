@@ -172,12 +172,30 @@ class BaseSilverTransformer(ABC):
 
                     # Batch insert com execute_values
                     colunas_sql = sql.SQL(', ').join(map(sql.Identifier, cols))
-                    placeholders = sql.SQL(', ').join(sql.Placeholder() * len(cols))
                     insert_query = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
                         sql.Identifier(schema), sql.Identifier(tabela), colunas_sql
                     )
 
-                    registros = df_silver[cols].replace({pd.NA: None, pd.NaT: None}).values.tolist()
+                    # Converter NaN/NaT para None e garantir tipos corretos
+                    df_insert = df_silver[cols].copy()
+                    df_insert = df_insert.replace({pd.NA: None, pd.NaT: None})
+                    df_insert = df_insert.where(pd.notna(df_insert), None)
+
+                    # Converter para lista e limpar valores
+                    registros = []
+                    for _, row in df_insert.iterrows():
+                        registro_limpo = []
+                        for val in row:
+                            # None permanece None
+                            if val is None or pd.isna(val):
+                                registro_limpo.append(None)
+                            # Floats que são inteiros (1.0, 2.0) converter para int
+                            elif isinstance(val, float) and val == int(val):
+                                registro_limpo.append(int(val))
+                            else:
+                                registro_limpo.append(val)
+                        registros.append(registro_limpo)
+
                     execute_values(cur, insert_query, registros, page_size=1000)
 
                 self.logger.success("✅ Transformação concluída!")
