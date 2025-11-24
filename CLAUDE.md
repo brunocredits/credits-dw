@@ -23,15 +23,20 @@ All commands should be run from the project root directory.
 
 ### Docker Operations
 
+**IMPORTANTE:** Todos os comandos `docker compose` devem ser executados a partir do diretório `docker/`:
+
 ```bash
-# Build and start the ETL container
+# Construir e iniciar o container ETL
 cd docker && docker compose up -d --build
 
-# Stop the environment
+# Parar o ambiente
 docker compose down
 
-# Access container shell for debugging
+# Acessar shell do container para debugging
 docker compose exec etl-processor bash
+
+# Ou da raiz do projeto com contexto explícito:
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 ### Running ETL Scripts
@@ -60,14 +65,32 @@ docker compose exec etl-processor python python/transformers/silver/transform_di
 ### Code Quality
 
 ```bash
-# Format code
+# Formatar código
 black python/
 
-# Lint code
+# Analisar código (linter)
 ruff check .
 
-# Type checking
+# Verificação de tipos
 mypy python/
+```
+
+### Testes
+
+```bash
+# Executar todos os testes
+pytest
+
+# Executar testes com relatório de cobertura
+pytest --cov=python --cov-report=html
+
+# Executar arquivo de teste específico
+pytest tests/test_example.py
+
+# Executar testes em modo verbose
+pytest -v
+
+# Configuração em pytest.ini na raiz do projeto
 ```
 
 ## Architecture & Code Structure
@@ -150,6 +173,30 @@ These are mounted from the host `docker/data/` directory.
 ### Date Handling
 
 Columns starting with `data_` or `dt_` are automatically converted to `YYYY-MM-DD` format by `_formatar_colunas_data()` in `python/ingestors/csv/base_csv_ingestor.py:175-195`. Invalid dates are converted to `None`.
+
+### Padrões Importantes de Código
+
+**Context Managers para Conexões de Banco:**
+```python
+from utils.db_connection import get_connection
+
+with get_connection() as conn:
+    # Conexão fechada automaticamente após o bloco
+    df = pd.read_sql("SELECT * FROM bronze.faturamento", conn)
+```
+
+**Boas Práticas de Logging:**
+```python
+from utils.logger import setup_logger
+
+logger = setup_logger(__name__)
+logger.info("Iniciando processo")
+logger.warning("Encontrados 5 valores nulos")
+logger.error("Falha na conexão", exc_info=True)
+```
+
+**Detecção Automática de Colunas de Data:**
+Colunas nomeadas como `data_*` ou `dt_*` são automaticamente formatadas para `YYYY-MM-DD` pelo `BaseCSVIngestor`. Datas inválidas se tornam `None`.
 
 ## Bronze Layer Tables
 
@@ -349,6 +396,79 @@ DB_PASSWORD=<your_password>
 
 This file is git-ignored for security.
 
+## Workflow de Desenvolvimento
+
+### Fazendo Alterações em Ingestores
+
+1. Modificar código do ingestor em `python/ingestors/csv/`
+2. Testar localmente: `docker compose exec etl-processor python python/ingestors/csv/ingest_<name>.py`
+3. Verificar logs: `tail -f logs/<script_name>.log`
+4. Validar dados: Query na tabela Bronze
+5. Se bem-sucedido, fazer commit das alterações
+
+### Fazendo Alterações em Transformadores
+
+1. Modificar código do transformador em `python/transformers/silver/`
+2. Garantir que dimensões sejam carregadas antes de fatos (ordem de dependência)
+3. Testar transformador: `docker compose exec etl-processor python python/transformers/silver/transform_<name>.py`
+4. Validar dados na tabela Silver
+5. Verificar `credits.silver_control` para rastreamento de execução
+
+### Dicas de Debugging
+
+**Visualizar logs em tempo real:**
+```bash
+docker compose exec etl-processor tail -f /app/logs/<script_name>.log
+```
+
+**Acessar banco de dados diretamente:**
+```bash
+# Usar psql ou qualquer cliente PostgreSQL com credenciais do .env
+psql -h <DB_HOST> -U <DB_USER> -d <DB_NAME>
+```
+
+**Inspecionar arquivos processados:**
+```bash
+ls -lh docker/data/processed/
+```
+
+**Verificar status do container:**
+```bash
+cd docker
+docker compose ps
+docker compose logs etl-processor
+```
+
+## Utilitários de Qualidade de Dados
+
+### Test Data Cleaner
+
+Localização: `python/utils/test_data_cleaner.py`
+
+Utilitário para limpar dados de teste/amostra antes do carregamento:
+- Remove caracteres inválidos
+- Padroniza formatos de data
+- Valida CNPJ/CPF
+- Detecta e sinaliza duplicatas
+
+**Uso:**
+```bash
+docker compose exec etl-processor python python/utils/test_data_cleaner.py
+```
+
+### Validação de Qualidade em Bronze vs Silver
+
+**Camada Bronze (Permissiva):**
+- Aceita dados problemáticos com WARNINGS
+- Registra detalhes nos logs para troubleshooting
+- Estratégia: preservar dados de origem
+
+**Camada Silver (Rigorosa):**
+- REJEITA dados com problemas de qualidade
+- Valida integridade referencial
+- Bloqueia execução se houver erros críticos
+- Estratégia: garantir qualidade analítica
+
 ## Database Improvements Applied
 
 ### Fixes Applied (2025-01-10)
@@ -405,4 +525,52 @@ CREATE INDEX idx_usuarios_ativo ON silver.dim_usuarios(flag_ativo, nk_usuario);
 - PKs → índice B-tree automático
 - FKs → considerar índices manuais se queries lentas (ver acima)
 - UNIQUE → índice B-tree automático
+
+## Contexto de Desenvolvimento Atual
+
+### Estado do Repositório
+
+**Branch atual:** `dev` (branch principal: `main`)
+
+**Arquivos modificados recentemente:**
+- `python/ingestors/csv/base_csv_ingestor.py` - Classe base dos ingestores
+- `python/run_all_ingestors.py` - Script para executar todos os ingestores
+- `python/transformers/base_transformer.py` - Classe base dos transformadores
+- `python/transformers/silver/transform_dim_usuarios.py` - Transformador de usuários
+- `python/transformers/silver/transform_fact_faturamento.py` - Transformador de faturamento
+
+**Novos arquivos:**
+- `pytest.ini` - Configuração de testes
+- `python/utils/test_data_cleaner.py` - Utilitário de limpeza de dados
+- `tests/` - Diretório de testes unitários
+
+### Commits Recentes
+
+1. **docs: rewrite README for Credits Brasil data team + fix date handling**
+2. **fix: corrigir transformadores Silver para execução completa**
+3. **merge: sincronizar dev com main para trazer camada Silver**
+4. **fix: corrigir mapeamentos de colunas nos ingestores Bronze**
+5. **feat: Silver layer fully functional with sample data**
+
+### Próximos Passos Recomendados
+
+1. **Implementar transformadores Silver pendentes:**
+   - `transform_dim_clientes.py` - Em template, precisa implementação completa
+   - `transform_dim_usuarios.py` - Em desenvolvimento
+   - `transform_fact_faturamento.py` - Em desenvolvimento
+
+2. **Expandir cobertura de testes:**
+   - Testes unitários para `BaseCSVIngestor`
+   - Testes para transformadores Silver
+   - Testes de integração Bronze → Silver
+
+3. **Melhorias de performance:**
+   - Adicionar índices em FKs da `fact_faturamento`
+   - Otimizar queries SCD Type 2
+   - Considerar particionamento de tabelas grandes
+
+4. **Documentação:**
+   - Adicionar docstrings em métodos complexos
+   - Documentar regras de negócio específicas
+   - Criar exemplos de queries analíticas
 

@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
-"""
-Script: ingest_faturamento.py
-Descrição: Ingestão de dados de faturamento do OneDrive CSV para a camada Bronze
-Frequência: Diária
-Versão: 1.0
-"""
-
+"""Ingestão de faturamento para Bronze"""
 import sys
 from pathlib import Path
 from typing import Dict, List
 
-# Adicionar diretório raiz ao path
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 
 class IngestFaturamento(BaseCSVIngestor):
-    """
-    Ingestor para os dados de faturamento.
-    """
+    """Ingestor para dados de faturamento"""
 
     def __init__(self):
         super().__init__(
@@ -29,31 +20,19 @@ class IngestFaturamento(BaseCSVIngestor):
         )
 
     def get_column_mapping(self) -> Dict[str, str]:
-        """
-        Retorna o mapeamento de colunas do CSV para a tabela Bronze.
-        """
         return {
             'Data': 'data',
             'Receita': 'receita',
-            'Moeda': 'moeda'
+            'Moeda': 'moeda',
+            'CNPJ Cliente': 'cnpj_cliente',
+            'Email Usuario': 'email_usuario'
         }
 
     def get_bronze_columns(self) -> List[str]:
-        """
-        Retorna a lista de colunas da tabela Bronze.
-        """
-        return [
-            'data',
-            'receita',
-            'moeda'
-        ]
+        return ['data', 'receita', 'moeda', 'cnpj_cliente', 'email_usuario']
 
     def get_date_columns(self) -> List[str]:
-        """
-        Retorna lista de colunas que devem ser formatadas como data.
-        """
         return ['data']
 
 if __name__ == '__main__':
-    ingestor = IngestFaturamento()
-    sys.exit(ingestor.executar())
+    sys.exit(IngestFaturamento().executar())
