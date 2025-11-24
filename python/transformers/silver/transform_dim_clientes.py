@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import pandas as pd
 from datetime import datetime
 from transformers.base_transformer import BaseSilverTransformer
