@@ -23,11 +23,13 @@ class IngestFaturamento(BaseCSVIngestor):
         return {
             'Data': 'data',
             'Receita': 'receita',
-            'Moeda': 'moeda'
+            'Moeda': 'moeda',
+            'CNPJ Cliente': 'cnpj_cliente',
+            'Email Usuario': 'email_usuario'
         }
 
     def get_bronze_columns(self) -> List[str]:
-        return ['data', 'receita', 'moeda']
+        return ['data', 'receita', 'moeda', 'cnpj_cliente', 'email_usuario']
 
     def get_date_columns(self) -> List[str]:
         return ['data']
