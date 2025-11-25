@@ -230,15 +230,17 @@ A classe `BaseCSVIngestor` define o fluxo de execução padrão:
 8. Mover arquivo para pasta de processados
 9. Finalizar registro de auditoria
 
-### Criando um Novo Ingestor
+### Criando um Novo Ingestor (Versão 2.0)
 
-Para criar um ingestor para um novo arquivo CSV:
+Para criar um ingestor para um novo arquivo CSV, você deve implementar 3 métodos obrigatórios:
 
 ```python
 from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 from typing import Dict, List
 
 class IngestMeuArquivo(BaseCSVIngestor):
+    """Ingestor para meu arquivo CSV"""
+
     def __init__(self):
         super().__init__(
             script_name='ingest_meu_arquivo.py',
@@ -251,27 +253,95 @@ class IngestMeuArquivo(BaseCSVIngestor):
         """Mapeia colunas do CSV para colunas do banco"""
         return {
             'Coluna CSV 1': 'coluna_banco_1',
-            'Coluna CSV 2': 'coluna_banco_2'
+            'Coluna CSV 2': 'coluna_banco_2',
+            'Email': 'email'
         }
 
     def get_bronze_columns(self) -> List[str]:
         """Lista colunas da tabela Bronze (excluindo sk_id autoincrement)"""
-        return ['coluna_banco_1', 'coluna_banco_2']
+        return ['coluna_banco_1', 'coluna_banco_2', 'email']
+
+    def get_validation_rules(self) -> Dict[str, dict]:
+        """
+        Regras de validação para cada campo Bronze.
+        OBRIGATÓRIO na versão 2.0.
+        """
+        return {
+            # Campo obrigatório com tamanho mínimo
+            'coluna_banco_1': {
+                'obrigatorio': True,
+                'tipo': 'string',
+                'min_len': 3,
+                'max_len': 100
+            },
+
+            # Campo opcional numérico positivo
+            'coluna_banco_2': {
+                'obrigatorio': False,
+                'tipo': 'decimal',
+                'positivo': True
+            },
+
+            # Email obrigatório
+            'email': {
+                'obrigatorio': True,
+                'tipo': 'email'
+            }
+        }
 
     def get_date_columns(self) -> List[str]:
         """Opcional: lista colunas de data para formatação automática"""
-        return ['coluna_banco_1']  # Se for uma data
+        return []  # Adicione nomes de colunas de data se houver
 ```
 
-### Transformações Aplicadas na Bronze
+**Tipos de validação disponíveis:**
+- `obrigatorio`: True/False - campo deve ter valor
+- `tipo`: 'string', 'int', 'float', 'decimal', 'data', 'email', 'cnpj_cpf'
+- `min_len` / `max_len`: tamanho da string
+- `minimo` / `maximo`: range numérico
+- `positivo`: True - número deve ser > 0
+- `nao_negativo`: True - número deve ser >= 0
+- `dominio`: lista de valores permitidos (ex: ['BRL', 'USD', 'EUR'])
+- `case_sensitive`: True/False - para validação de domínio
+- `formato_data`: '%Y-%m-%d' - formato de data esperado
 
-1. **Formatação de Datas**: Colunas de data são convertidas para formato YYYY-MM-DD. Datas inválidas são convertidas para NULL com warning nos logs.
+### Transformações e Validações Aplicadas na Bronze (Versão 2.0)
 
-2. **Renomeação de Colunas**: Nomes de colunas dos CSVs são mapeados para nomes padronizados do banco de dados.
+#### Fluxo de Processamento
 
-3. **Detecção de Valores Nulos**: O sistema detecta e loga percentual de valores nulos em cada coluna.
+1. **Leitura do CSV**: Arquivo é lido com pandas (todas colunas como string inicialmente)
+2. **Validação de Estrutura**: Verifica se todas colunas esperadas estão presentes
+3. **Renomeação de Colunas**: Mapeamento CSV → Bronze aplicado
+4. **Validação Linha por Linha**: Cada registro validado contra regras definidas
+5. **Rejeição de Inválidos**: Registros problemáticos são rejeitados e logados
+6. **Formatação de Datas**: Apenas datas válidas são formatadas para YYYY-MM-DD
+7. **Transformações Customizadas**: Aplicadas via `transform_custom()` se necessário
+8. **Inserção em Lote**: Apenas dados válidos inseridos (TRUNCATE/RELOAD)
+9. **Log de Rejeições**: Registros rejeitados salvos em `credits.logs_rejeicao`
+10. **Arquivamento**: Arquivo movido para `data/processed/` com timestamp
 
-4. **Preservação de Dados**: Todos os dados são inseridos, incluindo registros com valores NULL ou problemáticos. A validação rigorosa ocorre apenas na camada Silver.
+#### Validações Rigorosas Aplicadas
+
+**Campos Obrigatórios:**
+- Valores vazios, nulos ou apenas espaços são REJEITADOS
+- Mensagem: "Campo obrigatório '{campo}' está vazio ou nulo"
+
+**Validação de Formato:**
+- **Datas**: Devem estar em formato válido e conversível
+- **Emails**: Validação de formato com regex
+- **CNPJ/CPF**: Validação de dígitos verificadores
+- **Números**: Devem ser conversíveis para int/float/decimal
+
+**Validação de Domínio:**
+- Valores devem estar em lista pré-definida (ex: moedas, status)
+- Case-sensitive ou não, conforme configuração
+
+**Validação de Ranges:**
+- Números podem ter valores mínimos/máximos
+- Strings podem ter tamanhos mínimos/máximos
+
+**Importante:** Na versão 2.0, a Bronze **NÃO** preserva dados inválidos.
+Apenas registros 100% válidos são inseridos no banco de dados.
 
 ### Auditoria de Execuções
 
@@ -438,22 +508,32 @@ sk_cliente | nk_cnpj_cpf        | status   | data_inicio | data_fim   | flag_ati
 
 ## Qualidade de Dados e Validações
 
+### ⚡ Mudança Arquitetural Importante (Versão 2.0)
+
+**A partir da versão 2.0, a camada Bronze implementa validação RIGOROSA.**
+**Apenas dados VÁLIDOS são inseridos no banco de dados.**
+**Dados inválidos são REJEITADOS e registrados para auditoria.**
+
 ### Níveis de Validação
 
-#### Bronze Layer (Permissiva)
+#### Bronze Layer (RIGOROSA - Nova Arquitetura)
 
-A camada Bronze aceita dados problemáticos e registra warnings detalhados:
+A camada Bronze agora REJEITA dados inválidos ANTES da inserção:
 
-- Valores NULL em campos obrigatórios: ACEITA com WARNING
-- Datas inválidas: CONVERTE para NULL com WARNING
-- Valores negativos: ACEITA com WARNING
-- Duplicatas: ACEITA com WARNING
+- ✅ **Campos obrigatórios**: Devem estar preenchidos (não aceita NULL/vazio)
+- ✅ **Datas**: Devem ser válidas no formato YYYY-MM-DD
+- ✅ **Números**: Devem ser válidos e não-negativos quando apropriado
+- ✅ **Emails**: Devem ter formato válido (regex)
+- ✅ **CNPJ/CPF**: Devem ser válidos (dígitos verificadores)
+- ✅ **Domínios**: Devem estar na lista de valores permitidos
 
-**Objetivo:** Preservar dados de origem para auditoria e troubleshooting.
+**Registros rejeitados são registrados em `credits.logs_rejeicao`** para análise e correção.
 
-#### Silver Layer (Rigorosa)
+**Objetivo:** Garantir que apenas dados de qualidade entrem no Data Warehouse desde a origem.
 
-A camada Silver valida qualidade e REJEITA dados problemáticos:
+#### Silver Layer (Refinamento e Transformações)
+
+A camada Silver aplica regras de negócio e transformações:
 
 - CNPJ/CPF nulo: REJEITA execução
 - CNPJ/CPF duplicado: REJEITA execução
@@ -462,22 +542,101 @@ A camada Silver valida qualidade e REJEITA dados problemáticos:
 
 **Objetivo:** Garantir integridade e confiabilidade dos dados analíticos.
 
-### Testes com Dados Poluídos
+### Sistema de Logs de Rejeição (Versão 2.0)
 
-O sistema foi testado com dados intencionalmente problemáticos para validar comportamento:
+#### Tabela de Logs: `credits.logs_rejeicao`
 
-**Resultados dos Testes:**
+Todos os registros rejeitados pela camada Bronze são registrados em uma tabela dedicada para auditoria e correção.
 
-**Bronze - Dados Aceitos:**
-- 6 usuários com campos vazios (nome_empresa, Nome, email, senioridade)
-- 6 contas com CNPJ nulo, datas inválidas, razão social nula
-- 9 faturamentos com datas nulas, valores negativos, moedas inválidas (XXX)
+**Estrutura da Tabela:**
+```sql
+credits.logs_rejeicao
+├── id (BIGSERIAL PK)
+├── execucao_id (UUID) -- FK para credits.historico_atualizacoes
+├── script_nome (VARCHAR) -- Nome do ingestor que rejeitou
+├── tabela_destino (VARCHAR) -- Tabela Bronze de destino
+├── numero_linha (INTEGER) -- Linha no arquivo CSV original
+├── campo_falha (VARCHAR) -- Campo que falhou na validação
+├── motivo_rejeicao (TEXT) -- Descrição clara do motivo
+├── valor_recebido (TEXT) -- Valor que causou a falha
+├── registro_completo (JSONB) -- Registro completo para análise
+├── severidade (VARCHAR) -- WARNING, ERROR ou CRITICAL
+└── data_rejeicao (TIMESTAMP) -- Quando ocorreu a rejeição
+```
 
-**Silver - Validação Rejeitou:**
-- dim_clientes: Execução bloqueada por CNPJ duplicado
-- Mensagem: "CNPJs/CPFs duplicados encontrados"
+#### Consultando Rejeições
 
-**Conclusão:** Sistema detecta e bloqueia dados de baixa qualidade conforme esperado.
+**Ver últimas rejeições de uma execução:**
+```sql
+SELECT
+    numero_linha,
+    campo_falha,
+    motivo_rejeicao,
+    valor_recebido
+FROM credits.logs_rejeicao
+WHERE execucao_id = 'UUID_DA_EXECUCAO'
+ORDER BY numero_linha;
+```
+
+**Resumo de rejeições por campo:**
+```sql
+SELECT
+    campo_falha,
+    motivo_rejeicao,
+    COUNT(*) as total_rejeicoes
+FROM credits.logs_rejeicao
+WHERE script_nome = 'ingest_faturamento.py'
+    AND data_rejeicao >= NOW() - INTERVAL '7 days'
+GROUP BY campo_falha, motivo_rejeicao
+ORDER BY total_rejeicoes DESC;
+```
+
+**Ver registro completo de rejeição:**
+```sql
+SELECT
+    registro_completo::jsonb
+FROM credits.logs_rejeicao
+WHERE id = 123;
+```
+
+#### Como Funciona a Rejeição
+
+1. **Validação Linha por Linha**: Cada registro do CSV é validado campo por campo
+2. **Primeira Falha Rejeita**: Ao encontrar um campo inválido, o registro é rejeitado imediatamente
+3. **Log Estruturado**: Detalhes da rejeição são registrados na tabela
+4. **Resumo no Console**: Ao final, um resumo é exibido:
+   ```
+   ⚠️  RESUMO DE REJEIÇÕES: 15 registros rejeitados
+   ═══════════════════════════════════════════
+   📊 Rejeições por campo:
+      • cnpj_cliente: 8 rejeições
+      • email_usuario: 5 rejeições
+      • receita: 2 rejeições
+   🔍 Rejeições por severidade:
+      • ERROR: 15 rejeições
+   ```
+5. **Apenas Dados Válidos Inseridos**: Somente registros que passaram em TODAS as validações são inseridos
+
+#### Exemplo de Rejeição
+
+**CSV de Entrada:**
+```csv
+Data,Receita,Moeda,CNPJ Cliente,Email Usuario
+2024-01-15,15000.50,BRL,12.345.678/0001-90,joao.silva@empresa.com
+2024-01-20,-5000.00,BRL,98.765.432/0001-10,maria@invalid  <- INVÁLIDO
+2024-02-10,18500.75,XXX,INVALIDO,pedro.costa@empresa.com  <- INVÁLIDOS
+```
+
+**Resultado:**
+- ✅ Linha 2: Inserida (todos campos válidos)
+- ❌ Linha 3: Rejeitada (receita negativa, email inválido)
+- ❌ Linha 4: Rejeitada (moeda inválida, CNPJ inválido)
+
+**Log gerado:**
+```
+❌ REJEIÇÃO | Linha 3 | Campo 'receita' | Número deve ser positivo (> 0), recebido: -5000.00
+❌ REJEIÇÃO | Linha 4 | Campo 'moeda' | Valor 'XXX' não está no domínio permitido: ['BRL', 'USD', 'EUR']
+```
 
 ### Logs de Qualidade
 
