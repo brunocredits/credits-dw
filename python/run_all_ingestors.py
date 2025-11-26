@@ -74,7 +74,8 @@ class IngestorOrchestrator:
 
         except Exception as e:
             duracao = time.time() - start_time
-            self.logger.error(f"❌ {nome} falhou com exceção: {str(e)}")
+            # Não usar f-string com str(e) para evitar problemas com chaves na mensagem
+            self.logger.error("❌ " + nome + " falhou com exceção: " + str(e))
 
             return {
                 'nome': nome,
@@ -169,7 +170,8 @@ class IngestorOrchestrator:
             )
 
             if resultado['erro']:
-                self.logger.error(f"     ↳ Erro: {resultado['erro']}")
+                # Não usar f-string com mensagem de erro para evitar problemas com chaves
+                self.logger.error("     ↳ Erro: " + str(resultado['erro']))
 
         # Alertas
         if falhas > 0:
@@ -306,7 +308,8 @@ def main():
         return 1
 
     except Exception as e:
-        orchestrator.logger.error(f"\n❌ Erro fatal na execução: {str(e)}", exc_info=True)
+        # Não usar f-string com mensagem de erro para evitar problemas com chaves
+        orchestrator.logger.error("\n❌ Erro fatal na execução: " + str(e), exc_info=True)
         return 1
 
 

@@ -31,7 +31,7 @@ COPY requirements.txt .
 
 # Instalar dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install great_expectations # Para vaildação de qualidade
+
 # Copiar código da aplicação
 COPY python/ ./python/
 

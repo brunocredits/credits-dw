@@ -45,7 +45,8 @@ def init_connection_pool() -> None:
             connect_timeout=db_config.connect_timeout
         )
     except psycopg2.Error as e:
-        raise ConnectionError(f"Falha ao inicializar pool de conexões: {e}") from e
+        # Não usar f-string aqui para evitar problemas com chaves na mensagem
+        raise ConnectionError("Falha ao inicializar pool de conexões: " + str(e)) from e
 
 
 @retry(

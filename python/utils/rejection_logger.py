@@ -61,23 +61,19 @@ class RejectionLogger:
             registro_completo: Registro completo em formato dict
             severidade: 'WARNING', 'ERROR' ou 'CRITICAL'
         """
-        # Converter registro_completo para JSON
         registro_json = None
         if registro_completo:
             try:
-                # Converter valores não serializáveis
                 registro_serializado = self._serializar_registro(registro_completo)
                 registro_json = json.dumps(registro_serializado, ensure_ascii=False)
             except Exception as e:
                 logger.warning(f"Erro ao serializar registro: {e}")
                 registro_json = str(registro_completo)
 
-        # Truncar valor_recebido se muito grande
         valor_str = None
         if valor_recebido is not None:
-            valor_str = str(valor_recebido)[:500]  # Limitar a 500 caracteres
+            valor_str = str(valor_recebido)[:500]
 
-        # Adicionar ao buffer
         rejeicao = {
             'execucao_id': self.execucao_id,
             'script_nome': self.script_nome,
@@ -92,11 +88,7 @@ class RejectionLogger:
 
         self.rejeicoes.append(rejeicao)
 
-        # Log no console/arquivo também
-        log_msg = (
-            f"❌ REJEIÇÃO | Linha {numero_linha} | Campo '{campo_falha}' | "
-            f"{motivo_rejeicao}"
-        )
+        log_msg = f"REJEIÇÃO | Linha {numero_linha} | Campo '{campo_falha}' | {motivo_rejeicao}"
         if valor_recebido is not None:
             log_msg += f" | Valor: {valor_str}"
 
@@ -117,9 +109,13 @@ class RejectionLogger:
         Returns:
             Dicionário serializado
         """
+        import math
+
         serializado = {}
         for chave, valor in registro.items():
             if valor is None:
+                serializado[chave] = None
+            elif isinstance(valor, float) and (math.isnan(valor) or math.isinf(valor)):
                 serializado[chave] = None
             elif isinstance(valor, (str, int, float, bool)):
                 serializado[chave] = valor
@@ -168,11 +164,16 @@ class RejectionLogger:
             return total
 
         except Exception as e:
-            logger.error(f"❌ Erro ao salvar rejeições: {e}", exc_info=True)
+            logger.error(f"Erro ao salvar rejeições: {e}", exc_info=True)
             raise
 
     def get_total_rejeicoes(self) -> int:
-        """Retorna o número total de rejeições acumuladas no buffer."""
+        """
+        Retorna o número total de rejeições acumuladas no buffer.
+
+        Returns:
+            Número de rejeições no buffer
+        """
         return len(self.rejeicoes)
 
     def get_rejeicoes_por_campo(self) -> Dict[str, int]:
@@ -206,24 +207,22 @@ class RejectionLogger:
         total = self.get_total_rejeicoes()
 
         if total == 0:
-            logger.success("✓ Nenhuma rejeição encontrada")
+            logger.success("Nenhuma rejeição encontrada")
             return
 
         logger.warning("=" * 80)
-        logger.warning(f"⚠️  RESUMO DE REJEIÇÕES: {total} registros rejeitados")
+        logger.warning(f"RESUMO DE REJEIÇÕES: {total} registros rejeitados")
         logger.warning("=" * 80)
 
-        # Rejeições por campo
         por_campo = self.get_rejeicoes_por_campo()
-        logger.warning("📊 Rejeições por campo:")
+        logger.warning("Rejeições por campo:")
         for campo, count in sorted(por_campo.items(), key=lambda x: x[1], reverse=True):
-            logger.warning(f"   • {campo}: {count:,} rejeições")
+            logger.warning(f"  • {campo}: {count:,} rejeições")
 
-        # Rejeições por severidade
         por_severidade = self.get_rejeicoes_por_severidade()
-        logger.warning("🔍 Rejeições por severidade:")
+        logger.warning("Rejeições por severidade:")
         for sev, count in sorted(por_severidade.items()):
-            logger.warning(f"   • {sev}: {count:,} rejeições")
+            logger.warning(f"  • {sev}: {count:,} rejeições")
 
         logger.warning("=" * 80)
 

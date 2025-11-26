@@ -210,17 +210,13 @@ class BaseCSVIngestor(ABC):
             PermissionError: Se não há permissão de leitura
         """
         if not self.arquivo_path.exists():
-            raise FileNotFoundError(
-                f"Arquivo não encontrado: {self.arquivo_path}"
-            )
+            raise FileNotFoundError(f"Arquivo não encontrado: {self.arquivo_path}")
 
         if not os.access(self.arquivo_path, os.R_OK):
-            raise PermissionError(
-                f"Sem permissão de leitura: {self.arquivo_path}"
-            )
+            raise PermissionError(f"Sem permissão de leitura: {self.arquivo_path}")
 
-        size_mb = self.arquivo_path.stat().st_size / 1024 / 1024
-        self.logger.info(f"✓ Arquivo válido: {self.arquivo_nome} ({size_mb:.2f} MB)")
+        size_mb = self.arquivo_path.stat().st_size / (1024 * 1024)
+        self.logger.info(f"Arquivo válido: {self.arquivo_nome} ({size_mb:.2f} MB)")
         return True
 
     def ler_csv(self) -> pd.DataFrame:
@@ -235,22 +231,22 @@ class BaseCSVIngestor(ABC):
             pd.errors.ParserError: Se há erro ao parsear CSV
         """
         try:
-            self.logger.info(f"📖 Lendo arquivo: {self.arquivo_nome}")
+            self.logger.info(f"Lendo arquivo: {self.arquivo_nome}")
 
             df = pd.read_csv(
                 self.arquivo_path,
                 encoding=self.csv_config.encoding,
                 sep=self.csv_config.separator,
-                dtype=str,  # Ler tudo como string inicialmente
+                dtype=str,
                 na_values=self.csv_config.na_values,
-                keep_default_na=False  # Não converter strings vazias em NaN
+                keep_default_na=False
             )
 
-            self.logger.success(f"✓ {len(df):,} linhas lidas do CSV")
+            self.logger.success(f"{len(df):,} linhas lidas do CSV")
             return df
 
         except (pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            self.logger.error(f"❌ Erro ao ler CSV: {e}")
+            self.logger.error(f"Erro ao ler CSV: {e}")
             raise
 
     def validar_colunas_csv(self, df: pd.DataFrame) -> bool:
@@ -271,12 +267,9 @@ class BaseCSVIngestor(ABC):
         faltando = esperadas - presentes
 
         if faltando:
-            raise ValueError(
-                f"Colunas faltando no CSV: {faltando}. "
-                f"Esperadas: {esperadas}"
-            )
+            raise ValueError(f"Colunas faltando no CSV: {faltando}. Esperadas: {esperadas}")
 
-        self.logger.success("✓ Todas colunas esperadas presentes no CSV")
+        self.logger.success("Todas colunas esperadas presentes no CSV")
         return True
 
     # ========================================================================
@@ -287,7 +280,7 @@ class BaseCSVIngestor(ABC):
         """
         Valida cada linha do DataFrame e filtra apenas dados válidos.
 
-        Este é o CORAÇÃO da validação rigorosa da Bronze.
+        Este é o coração da validação rigorosa da Bronze.
         Cada linha é validada campo por campo usando as regras definidas.
         Linhas inválidas são rejeitadas e registradas.
 
@@ -295,34 +288,29 @@ class BaseCSVIngestor(ABC):
             df: DataFrame com colunas Bronze já mapeadas
 
         Returns:
-            Tupla (df_valido, num_rejeitados)
+            Tupla (df_valido, num_rejeitados) onde:
             - df_valido: DataFrame apenas com linhas válidas
             - num_rejeitados: Número de linhas rejeitadas
         """
-        self.logger.info("🔍 Validando dados rigorosamente...")
+        self.logger.info("Validando dados rigorosamente...")
 
         regras = self.get_validation_rules()
         indices_validos = []
         total_linhas = len(df)
 
-        # Validar cada linha individualmente
         for idx, row in df.iterrows():
-            # idx é o número da linha no DataFrame (0-based)
-            # Adicionar +2 para obter linha do CSV original (+1 por 0-based, +1 por header)
+            # Converter índice DataFrame para número de linha CSV
+            # (+2: +1 para 0-based, +1 para header)
             numero_linha_csv = idx + 2
 
             linha_valida = True
             registro_dict = row.to_dict()
 
-            # Validar cada campo desta linha
             for campo, regra in regras.items():
                 valor = row.get(campo)
-
-                # Aplicar validação
                 valido, mensagem_erro = validar_campo(valor, campo, regra)
 
                 if not valido:
-                    # Registrar rejeição
                     self.rejection_logger.registrar_rejeicao(
                         numero_linha=numero_linha_csv,
                         campo_falha=campo,
@@ -332,27 +320,22 @@ class BaseCSVIngestor(ABC):
                         severidade='ERROR'
                     )
                     linha_valida = False
-                    break  # Parar validação desta linha (já é inválida)
+                    break
 
             if linha_valida:
                 indices_validos.append(idx)
 
-        # Filtrar apenas linhas válidas
         df_valido = df.loc[indices_validos].copy()
         num_rejeitados = total_linhas - len(df_valido)
 
         if num_rejeitados > 0:
             percentual = (num_rejeitados / total_linhas) * 100
-            self.logger.warning(
-                f"⚠️  {num_rejeitados:,} linhas rejeitadas ({percentual:.1f}%)"
-            )
+            self.logger.warning(f"{num_rejeitados:,} linhas rejeitadas ({percentual:.1f}%)")
             self.rejection_logger.imprimir_resumo()
         else:
-            self.logger.success("✓ Todas as linhas são válidas!")
+            self.logger.success("Todas as linhas são válidas")
 
-        self.logger.success(
-            f"✓ {len(df_valido):,} linhas válidas prontas para Bronze"
-        )
+        self.logger.success(f"{len(df_valido):,} linhas válidas prontas para Bronze")
 
         return df_valido, num_rejeitados
 
@@ -368,39 +351,29 @@ class BaseCSVIngestor(ABC):
             df: DataFrame com dados já validados
 
         Returns:
-            Tupla (registros, colunas)
+            Tupla (registros, colunas) onde:
             - registros: Lista de listas com valores
             - colunas: Lista com nomes das colunas
         """
-        self.logger.info("🔄 Transformando para formato Bronze...")
+        self.logger.info("Transformando para formato Bronze...")
 
-        # Renomear colunas CSV -> Bronze
         df_bronze = df.rename(columns=self.get_column_mapping())
 
-        # Adicionar colunas faltantes (preencher com None)
         colunas_bronze = self.get_bronze_columns()
         for col in colunas_bronze:
             if col not in df_bronze.columns:
                 df_bronze[col] = None
                 self.logger.debug(f"Coluna '{col}' preenchida com NULL")
 
-        # Formatar datas para padrão Bronze (YYYY-MM-DD)
         df_bronze = self._formatar_datas(df_bronze)
-
-        # Aplicar transformações customizadas (se houver)
         df_bronze = self.transform_custom(df_bronze)
-
-        # Limpar dados: remover linhas completamente vazias
         df_bronze = df_bronze.dropna(how='all')
-
-        # Converter pandas NA/NaT para None (compatível com PostgreSQL)
         df_bronze = df_bronze.replace({pd.NA: None, pd.NaT: None})
         df_bronze = df_bronze.where(pd.notna(df_bronze), None)
 
-        # Converter para lista de listas (formato para inserção)
         registros = df_bronze[colunas_bronze].values.tolist()
 
-        self.logger.success(f"✓ {len(registros):,} registros prontos para inserção")
+        self.logger.success(f"{len(registros):,} registros prontos para inserção")
         return registros, colunas_bronze
 
     def _formatar_datas(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -416,25 +389,18 @@ class BaseCSVIngestor(ABC):
         colunas_data = self.get_date_columns()
 
         if not colunas_data:
-            return df  # Nenhuma coluna de data
+            return df
 
-        self.logger.info("📅 Formatando colunas de data...")
+        self.logger.info("Formatando colunas de data...")
 
         for col in colunas_data:
             if col in df.columns:
-                # Converter para datetime
                 df[col] = pd.to_datetime(df[col], errors='coerce')
-
-                # Manter valores válidos, None para inválidos
                 df[col] = df[col].where(df[col].notna(), None)
-
-                # Formatar como string YYYY-MM-DD
                 df[col] = df[col].apply(
-                    lambda x: x.strftime(self.csv_config.date_format)
-                    if pd.notna(x) else None
+                    lambda x: x.strftime(self.csv_config.date_format) if pd.notna(x) else None
                 )
-
-                self.logger.debug(f"✓ Coluna '{col}' formatada como data")
+                self.logger.debug(f"Coluna '{col}' formatada como data")
 
         return df
 
@@ -458,24 +424,23 @@ class BaseCSVIngestor(ABC):
             Número de linhas inseridas
         """
         if not registros:
-            self.logger.warning("⚠️  Nenhum registro válido para inserir")
+            self.logger.warning("Nenhum registro válido para inserir")
             return 0
 
-        self.logger.info(f"💾 Inserindo {len(registros):,} registros na Bronze...")
+        self.logger.info(f"Inserindo {len(registros):,} registros na Bronze...")
 
         with get_cursor(conn) as cur:
-            # Dividir tabela_destino em schema e tabela
             schema, tabela = self.tabela_destino.split('.')
 
-            # TRUNCATE: remover dados existentes (estratégia Bronze)
+            # TRUNCATE: remover dados existentes
             truncate_query = sql.SQL("TRUNCATE TABLE {}.{} CASCADE").format(
                 sql.Identifier(schema),
                 sql.Identifier(tabela)
             )
-            self.logger.info(f"🗑️  Truncando tabela {self.tabela_destino}")
+            self.logger.info(f"Truncando tabela {self.tabela_destino}")
             cur.execute(truncate_query)
 
-            # INSERT: inserir novos dados em lote (batch insert otimizado)
+            # INSERT: inserir novos dados em lote
             colunas_sql = sql.SQL(', ').join(map(sql.Identifier, colunas))
             insert_query = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
                 sql.Identifier(schema),
@@ -486,17 +451,15 @@ class BaseCSVIngestor(ABC):
             batch_size = self.etl_config.batch_insert_size
             total_inserido = 0
 
-            # Inserir em lotes para otimizar performance
             for i in range(0, len(registros), batch_size):
                 batch = registros[i:i + batch_size]
                 execute_values(cur, insert_query, batch, page_size=batch_size)
                 total_inserido += len(batch)
 
-                # Log de progresso
                 if i + batch_size < len(registros):
-                    self.logger.info(f"   • {total_inserido:,} / {len(registros):,}")
+                    self.logger.info(f"Progresso: {total_inserido:,} / {len(registros):,}")
 
-        self.logger.success(f"✓ {total_inserido:,} registros inseridos na Bronze")
+        self.logger.success(f"{total_inserido:,} registros inseridos na Bronze")
         return total_inserido
 
     # ========================================================================
@@ -513,16 +476,11 @@ class BaseCSVIngestor(ABC):
         try:
             timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
             arquivo_destino = self.processed_dir / f"{timestamp}_{self.arquivo_nome}"
-
             shutil.move(str(self.arquivo_path), str(arquivo_destino))
-
-            self.logger.success(f"✓ Arquivo arquivado: {arquivo_destino.name}")
+            self.logger.success(f"Arquivo arquivado: {arquivo_destino.name}")
 
         except Exception as e:
-            self.logger.warning(
-                f"⚠️  Não foi possível arquivar arquivo: {e}"
-            )
-            # Não falhar a execução por erro no arquivamento
+            self.logger.warning(f"Não foi possível arquivar arquivo: {e}")
 
     # ========================================================================
     # PIPELINE DE EXECUÇÃO PRINCIPAL
@@ -558,19 +516,17 @@ class BaseCSVIngestor(ABC):
             # FASE 1: PREPARAÇÃO
             # ================================================================
             self.logger.info("=" * 80)
-            self.logger.info(f"🚀 INICIANDO: {self.script_name}")
-            self.logger.info(f"🎯 DESTINO: {self.tabela_destino}")
-            self.logger.info(f"📁 ARQUIVO: {self.arquivo_nome}")
+            self.logger.info(f"INICIANDO: {self.script_name}")
+            self.logger.info(f"DESTINO: {self.tabela_destino}")
+            self.logger.info(f"ARQUIVO: {self.arquivo_nome}")
             self.logger.info("=" * 80)
 
             # Validar arquivo existe e é acessível
             self.validar_arquivo()
 
-            # Conectar ao banco de dados
             conn = get_db_connection()
-            self.logger.success("✓ Conectado ao banco de dados")
+            self.logger.success("Conectado ao banco de dados")
 
-            # Registrar início da execução (auditoria)
             execucao_id = registrar_execucao(
                 conn=conn,
                 script_nome=self.script_name,
@@ -578,7 +534,7 @@ class BaseCSVIngestor(ABC):
                 tabela_origem=None,
                 tabela_destino=self.tabela_destino
             )
-            self.logger.info(f"✓ Execução registrada: {execucao_id}")
+            self.logger.info(f"Execução registrada: {execucao_id}")
 
             # Inicializar rejection logger
             self.rejection_logger = RejectionLogger(
@@ -624,9 +580,8 @@ class BaseCSVIngestor(ABC):
             if num_rejeitados > 0:
                 self.rejection_logger.salvar_rejeicoes()
 
-            # Commit transação (sucesso!)
             conn.commit()
-            self.logger.success("✓ Transação confirmada (COMMIT)")
+            self.logger.success("Transação confirmada (COMMIT)")
 
             # ================================================================
             # FASE 4: FINALIZAÇÃO
@@ -663,17 +618,14 @@ class BaseCSVIngestor(ABC):
             # ================================================================
             # TRATAMENTO DE ERRO
             # ================================================================
-            erro_msg = str(e).replace('{', '{{').replace('}', '}}')
-            self.logger.error(f"❌ ERRO: {erro_msg}", exc_info=True)
+            self.logger.error(f"ERRO: {e}", exc_info=True)
 
             duracao = time.time() - self.start_time if self.start_time else 0
 
             if conn:
-                # Rollback transação
                 conn.rollback()
-                self.logger.warning("⚠️  Transação revertida (ROLLBACK)")
+                self.logger.warning("Transação revertida (ROLLBACK)")
 
-                # Finalizar execução com erro (auditoria)
                 if execucao_id:
                     finalizar_execucao(
                         conn=conn,
@@ -689,7 +641,7 @@ class BaseCSVIngestor(ABC):
                 duracao_segundos=duracao
             )
 
-            return 1  # Erro
+            return 1
 
         finally:
             # ================================================================
@@ -697,4 +649,4 @@ class BaseCSVIngestor(ABC):
             # ================================================================
             if conn:
                 conn.close()
-                self.logger.info("✓ Conexão com banco encerrada")
+                self.logger.info("Conexão com banco encerrada")
