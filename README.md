@@ -2,7 +2,7 @@
 
 Pipeline ETL moderno para consolidação de dados financeiros, implementando uma arquitetura Medallion (Bronze e Silver) com um modelo dimensional Star Schema e um sistema rigoroso de validação de dados na camada de entrada.
 
-**Versão:** 4.1 (Novembro de 2025 - Padronização CNPJ/CPF e Melhorias Gerais)
+**Versão:** 4.2 (Novembro de 2025 - Pipeline 100% Docker + Limpeza Completa)
 
 ## 📋 Sumário
 
@@ -61,12 +61,13 @@ graph TD
 
 ## 🎯 Características Principais
 
--   **Validação Rigorosa:** Sistema completo de validação na camada Bronze com logs detalhados de rejeições
--   **Padronização de Dados:** CNPJ/CPF formatados automaticamente (limpo + formatado)
--   **SCD Type 2:** Histórico de mudanças em dimensões críticas (clientes e usuários)
--   **Star Schema:** Modelo dimensional otimizado para análises e BI
--   **Auditoria Completa:** Rastreamento de todas as execuções e rejeições
--   **Docker:** Ambiente completamente containerizado para fácil deployment
+-   **100% Docker:** Pipeline completo roda dentro do container, sem scripts locais
+-   **Validação Rigorosa:** Sistema de validação na Bronze rejeita dados inválidos antes da inserção
+-   **Logs de Rejeição:** Auditoria completa de registros rejeitados com motivo detalhado
+-   **CNPJ/CPF Padronizados:** Geração automática de campos limpos e formatados
+-   **Star Schema:** Modelo dimensional (4 dimensões + 1 fato) otimizado para BI
+-   **SCD Type 2:** Versionamento automático para rastreamento de mudanças históricas
+-   **Integridade Referencial:** FK constraints garantem consistência entre fatos e dimensões
 
 ---
 
