@@ -9,7 +9,7 @@ def registrar_execucao(conn, script_nome: str, camada: str,
                        tabela_destino: Optional[str] = None) -> str:
     """Registra início de execução ETL. Retorna UUID como string"""
     query = """
-        INSERT INTO credits.historico_atualizacoes
+        INSERT INTO auditoria.historico_execucao
         (script_nome, camada, tabela_origem, tabela_destino, data_inicio, status)
         VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
     """
@@ -24,7 +24,7 @@ def finalizar_execucao(conn, execucao_id: str, status: str,
                        mensagem_erro: Optional[str] = None) -> None:
     """Finaliza registro de execução ETL"""
     query = """
-        UPDATE credits.historico_atualizacoes
+        UPDATE auditoria.historico_execucao
         SET data_fim = %s, status = %s, linhas_processadas = %s,
             linhas_inseridas = %s, linhas_atualizadas = %s,
             linhas_erro = %s, mensagem_erro = %s
@@ -40,7 +40,7 @@ def obter_ultima_execucao(conn, script_nome: str) -> Optional[Dict]:
     query = """
         SELECT id, script_nome, camada, data_inicio, data_fim, status,
                linhas_processadas, linhas_inseridas, mensagem_erro
-        FROM credits.historico_atualizacoes
+        FROM auditoria.historico_execucao
         WHERE script_nome = %s
         ORDER BY data_inicio DESC LIMIT 1
     """
@@ -64,7 +64,7 @@ def listar_execucoes_dia(conn, data: Optional[datetime] = None) -> List[Dict]:
     query = """
         SELECT id, script_nome, camada, data_inicio, data_fim, status,
                linhas_processadas, linhas_inseridas
-        FROM credits.historico_atualizacoes
+        FROM auditoria.historico_execucao
         WHERE DATE(data_inicio) = %s
         ORDER BY data_inicio DESC
     """
@@ -83,7 +83,7 @@ def obter_execucoes_em_andamento(conn) -> List[Dict]:
     """Lista execuções em andamento"""
     query = """
         SELECT id, script_nome, camada, tabela_destino, data_inicio, status
-        FROM credits.historico_atualizacoes
+        FROM auditoria.historico_execucao
         WHERE status = 'em_execucao'
         ORDER BY data_inicio DESC
     """
@@ -106,7 +106,7 @@ def obter_estatisticas_script(conn, script_nome: str, dias: int = 30) -> Dict:
                AVG(EXTRACT(EPOCH FROM (data_fim - data_inicio))) as duracao_media,
                AVG(linhas_processadas) as media_linhas,
                MAX(data_inicio) as ultima_exec
-        FROM credits.historico_atualizacoes
+        FROM auditoria.historico_execucao
         WHERE script_nome = %s
           AND data_inicio >= NOW() - INTERVAL '1 day' * %s
           AND status IN ('sucesso', 'erro')

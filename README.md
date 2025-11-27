@@ -1,8 +1,8 @@
-# Credits Brasil - Data Warehouse (v4.0)
+# Credits Brasil - Data Warehouse (v4.1)
 
 Pipeline ETL moderno para consolidação de dados financeiros, implementando uma arquitetura Medallion (Bronze e Silver) com um modelo dimensional Star Schema e um sistema rigoroso de validação de dados na camada de entrada.
 
-**Versão:** 4.0 (Novembro de 2025 - Refatoração com Validação Rigorosa na Bronze)
+**Versão:** 4.2 (Novembro de 2025 - Pipeline 100% Docker + Limpeza Completa)
 
 ## 📋 Sumário
 
@@ -59,15 +59,15 @@ graph TD
 
 ---
 
-## ✨ Principais Melhorias (v4.0)
+## 🎯 Características Principais
 
-Esta versão representa uma grande evolução na confiabilidade do pipeline:
-
-1.  **Validação Rigorosa na Bronze:** Garante que apenas dados de alta qualidade entrem no DW, movendo a responsabilidade da limpeza para a porta de entrada.
-2.  **Logs de Rejeição:** Cria uma trilha de auditoria completa para todos os dados que não foram carregados, explicando o motivo da falha e permitindo a correção na origem.
-3.  **Template Method Pattern:** Padroniza a criação de novos ingestores e transformadores, reduzindo a duplicação de código e o risco de erros.
-4.  **Segurança e Idempotência:** Proteção contra SQL Injection e garantia de que as execuções podem ser repetidas sem efeitos colaterais indesejados.
-5.  **Código Limpo:** Adoção de `Type Hints`, `docstrings` e princípios de código limpo para facilitar a manutenção.
+-   **100% Docker:** Pipeline completo roda dentro do container, sem scripts locais
+-   **Validação Rigorosa:** Sistema de validação na Bronze rejeita dados inválidos antes da inserção
+-   **Logs de Rejeição:** Auditoria completa de registros rejeitados com motivo detalhado
+-   **CNPJ/CPF Padronizados:** Geração automática de campos limpos e formatados
+-   **Star Schema:** Modelo dimensional (4 dimensões + 1 fato) otimizado para BI
+-   **SCD Type 2:** Versionamento automático para rastreamento de mudanças históricas
+-   **Integridade Referencial:** FK constraints garantem consistência entre fatos e dimensões
 
 ---
 

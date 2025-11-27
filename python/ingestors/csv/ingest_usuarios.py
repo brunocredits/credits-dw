@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """
 Módulo: ingest_usuarios.py
-Descrição: Ingestão de dados de usuários para camada Bronze
-Versão: 2.0
-
-Este ingestor processa dados de usuários com validação rigorosa.
-Apenas registros válidos são inseridos na Bronze.
+Descrição: Ingestão de dados de usuários para a camada Bronze.
 """
 
 import sys
 from pathlib import Path
 from typing import Dict, List
 
+# Adiciona o diretório raiz ao path para permitir importações de outros módulos
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
@@ -19,17 +16,11 @@ from ingestors.csv.base_csv_ingestor import BaseCSVIngestor
 
 class IngestUsuarios(BaseCSVIngestor):
     """
-    Ingestor para dados de usuários.
-
-    Validações aplicadas:
-    - Nome Empresa: obrigatório
-    - Nome: obrigatório
-    - Email: obrigatório, formato válido
-    - Canal 1: obrigatório
-    - Área, Senioridade, Gestor, Canal 2, Email Líder: opcionais
+    Ingestor para dados de usuários, aplicando validações rigorosas.
     """
 
     def __init__(self):
+        """Inicializa o ingestor com seus parâmetros específicos."""
         super().__init__(
             script_name='ingest_usuarios.py',
             tabela_destino='bronze.usuarios',
@@ -38,93 +29,48 @@ class IngestUsuarios(BaseCSVIngestor):
         )
 
     def get_column_mapping(self) -> Dict[str, str]:
-        """Mapeamento de colunas CSV -> Bronze"""
+        """Mapeia colunas do CSV para colunas do banco de dados."""
         return {
             'nome_empresa': 'nome_empresa',
-            'Nome': 'Nome',
+            'nome': 'nome',
             'area': 'area',
             'senioridade': 'senioridade',
             'gestor': 'gestor',
             'email': 'email',
-            'canal 1': 'canal_1',
-            'canal 2': 'canal_2',
+            'canal_1': 'canal_1',
+            'canal_2': 'canal_2',
             'email_lider': 'email_lider'
         }
 
     def get_bronze_columns(self) -> List[str]:
-        """Colunas da tabela bronze.usuarios"""
+        """Retorna a lista ordenada de colunas da tabela de destino."""
         return [
-            'nome_empresa', 'Nome', 'area', 'senioridade',
+            'nome_empresa', 'nome', 'area', 'senioridade',
             'gestor', 'email', 'canal_1', 'canal_2', 'email_lider'
         ]
 
     def get_validation_rules(self) -> Dict[str, dict]:
-        """
-        Regras de validação rigorosas para cada campo.
-
-        Returns:
-            Dicionário com regras de validação
-        """
+        """Define as regras de validação rigorosas para cada campo."""
         return {
-            # Nome da empresa: obrigatório
             'nome_empresa': {
                 'obrigatorio': True,
                 'tipo': 'string',
-                'min_len': 2,
                 'max_len': 255
             },
-
-            # Nome do usuário: obrigatório
-            'Nome': {
+            'nome': {
                 'obrigatorio': True,
                 'tipo': 'string',
-                'min_len': 2,
                 'max_len': 255
             },
-
-            # Área: opcional
-            'area': {
-                'obrigatorio': False,
-                'tipo': 'string',
-                'max_len': 100
-            },
-
-            # Senioridade: opcional
-            'senioridade': {
-                'obrigatorio': False,
-                'tipo': 'string',
-                'max_len': 50
-            },
-
-            # Gestor: opcional
-            'gestor': {
-                'obrigatorio': False,
-                'tipo': 'string',
-                'max_len': 255
-            },
-
-            # Email: obrigatório e formato válido
             'email': {
                 'obrigatorio': True,
                 'tipo': 'email'
             },
-
-            # Canal 1: obrigatório (canal principal do usuário)
             'canal_1': {
                 'obrigatorio': True,
                 'tipo': 'string',
-                'min_len': 2,
                 'max_len': 100
             },
-
-            # Canal 2: opcional (canal secundário)
-            'canal_2': {
-                'obrigatorio': False,
-                'tipo': 'string',
-                'max_len': 100
-            },
-
-            # Email do líder: opcional, mas se preenchido deve ser válido
             'email_lider': {
                 'obrigatorio': False,
                 'tipo': 'email'
@@ -133,4 +79,5 @@ class IngestUsuarios(BaseCSVIngestor):
 
 
 if __name__ == '__main__':
+    # Permite a execução do script diretamente
     sys.exit(IngestUsuarios().executar())
