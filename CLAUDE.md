@@ -12,13 +12,20 @@ This is a **Data Warehouse ETL pipeline** for Credits Brasil that ingests CSV fi
 - **Bronze Layer (v2.0 - RIGOROUS)**: Raw data storage with **strict validation**. Only 100% valid records enter the database. Invalid records are REJECTED and logged. Uses **TRUNCATE/RELOAD** strategy.
 - **Silver Layer**: Dimensional model (Star Schema) with business logic, data quality rules, and SCD Type 2 for historical tracking. Uses **incremental/SCD Type 2** strategy.
 - **Schemas**: `bronze` (validated raw data), `silver` (dimensional model), and `credits` (ETL metadata/audit/rejection logs)
-- **Date Dimension**: `bronze.data` feeds `silver.dim_tempo` - pre-calculated date dimension with business calendar attributes
+- **Date Dimension**: `bronze.data` feeds `silver.dim_data` - pre-calculated date dimension with business calendar attributes
 - **Audit Trail**: All ETL executions tracked in `credits.historico_atualizacoes`, rejections in `credits.logs_rejeicao`, Silver loads in `credits.silver_control`
 
 **Current Data Status:**
-- Bronze: ✅ Operational with validation (4 tables: 6 contas, 6 usuarios, 9 faturamento, 4,018 datas)
-- Silver: ✅ Fully loaded (dim_tempo: 4,018, dim_canal: 7, dim_clientes: 9, dim_usuarios: 5, fact_faturamento: 9)
+- Bronze: ✅ Operational with validation (4 tables: contas, usuarios, faturamentos, data)
+- Silver: ✅ Fully loaded (3 dimensions: dim_data, dim_cliente, dim_usuario; 1 fact: fato_faturamento)
 - Rejection logs: Active and tracking invalid records
+
+**Naming Conventions:**
+- Ingestors use plural: `ingest_faturamentos.py`, `ingest_contas.py`, `ingest_usuarios.py`
+- Bronze tables match ingestor names where appropriate
+- Transformers use singular: `transform_dim_cliente.py`, `transform_dim_usuario.py`
+- Silver tables use singular for dimensions and "fato_" prefix for facts
+- Runner scripts: `run_bronze_ingestors.py`, `run_silver_transformers.py`
 
 ## Critical Architectural Principles
 
@@ -76,22 +83,25 @@ docker compose -f docker/docker-compose.yml up -d --build
 **Bronze Layer (CSV Ingestors):**
 ```bash
 # Execute ALL CSV ingestors at once
-docker compose exec etl-processor python python/run_all_ingestors.py
+docker compose exec etl-processor python python/run_bronze_ingestors.py
 
 # Execute a specific ingestor
-docker compose exec etl-processor python python/ingestors/csv/ingest_faturamento.py
+docker compose exec etl-processor python python/ingestors/csv/ingest_faturamentos.py
 docker compose exec etl-processor python python/ingestors/csv/ingest_usuarios.py
-docker compose exec etl-processor python python/ingestors/csv/ingest_contas_base_oficial.py
+docker compose exec etl-processor python python/ingestors/csv/ingest_contas.py
+docker compose exec etl-processor python python/ingestors/csv/ingest_calendario.py
 ```
 
 **Silver Layer (Transformers):**
 ```bash
 # Execute ALL Silver transformations
-docker compose exec etl-processor python python/run_silver_transformations.py
+docker compose exec etl-processor python python/run_silver_transformers.py
 
 # Execute a specific transformer
-docker compose exec etl-processor python python/transformers/silver/transform_dim_tempo.py
-docker compose exec etl-processor python python/transformers/silver/transform_dim_clientes.py
+docker compose exec etl-processor python python/transformers/silver/transform_dim_data.py
+docker compose exec etl-processor python python/transformers/silver/transform_dim_cliente.py
+docker compose exec etl-processor python python/transformers/silver/transform_dim_usuario.py
+docker compose exec etl-processor python python/transformers/silver/transform_fato_faturamento.py
 ```
 
 ### Code Quality
@@ -139,18 +149,18 @@ All CSV ingestors inherit from `BaseCSVIngestor` in `python/ingestors/csv/base_c
 
 3. **Call super().__init__()** with:
    - `script_name`: Script filename for audit logs
-   - `tabela_destino`: Full table name (e.g., `'bronze.faturamento'`)
+   - `tabela_destino`: Full table name (e.g., `'bronze.faturamentos'`)
    - `arquivo_nome`: CSV filename to process
    - `input_subdir`: Subdirectory under `/app/data/input/` (usually `'onedrive'`)
 
-**Example ingestor structure** (`python/ingestors/csv/ingest_faturamento.py`):
+**Example ingestor structure** (`python/ingestors/csv/ingest_faturamentos.py`):
 ```python
-class IngestFaturamento(BaseCSVIngestor):
+class IngestFaturamentos(BaseCSVIngestor):
     def __init__(self):
         super().__init__(
-            script_name='ingest_faturamento.py',
-            tabela_destino='bronze.faturamento',
-            arquivo_nome='faturamento.csv',
+            script_name='ingest_faturamentos.py',
+            tabela_destino='bronze.faturamentos',
+            arquivo_nome='faturamentos.csv',
             input_subdir='onedrive'
         )
 
@@ -239,10 +249,10 @@ The `executar()` method orchestrates a **rigorous validation pipeline**:
 **Quick database access (pre-approved commands):**
 ```bash
 # View Bronze layer structure
-PGPASSWORD='58230925AD@' psql -h creditsdw.postgres.database.azure.com -U creditsdw -d creditsdw -c "\d bronze.faturamento"
+PGPASSWORD='58230925AD@' psql -h creditsdw.postgres.database.azure.com -U creditsdw -d creditsdw -c "\d bronze.faturamentos"
 
 # Query data directly
-PGPASSWORD='58230925AD@' psql -h creditsdw.postgres.database.azure.com -U creditsdw -d creditsdw -c "SELECT * FROM bronze.faturamento LIMIT 5"
+PGPASSWORD='58230925AD@' psql -h creditsdw.postgres.database.azure.com -U creditsdw -d creditsdw -c "SELECT * FROM bronze.faturamentos LIMIT 5"
 
 # Run Python scripts with environment
 DB_HOST=creditsdw.postgres.database.azure.com DB_PORT=5432 DB_NAME=creditsdw DB_USER=creditsdw DB_PASSWORD='58230925AD@' python3 <script>
@@ -271,11 +281,11 @@ Columns starting with `data_` or `dt_` are automatically converted to `YYYY-MM-D
 
 **Context Managers para Conexões de Banco:**
 ```python
-from utils.db_connection import get_connection
+from utils.db_connection import get_db_connection
 
-with get_connection() as conn:
+with get_db_connection() as conn:
     # Conexão fechada automaticamente após o bloco
-    df = pd.read_sql("SELECT * FROM bronze.faturamento", conn)
+    df = pd.read_sql("SELECT * FROM bronze.faturamentos", conn)
 ```
 
 **Boas Práticas de Logging:**
@@ -293,20 +303,20 @@ Colunas nomeadas como `data_*` ou `dt_*` são automaticamente formatadas para `Y
 
 ## Bronze Layer Tables
 
-**bronze.contas_base_oficial** (6 records):
-- `cnpj_cpf`, `tipo`, `status`, `status_qualificação_da_conta`
-- `data_criacao`, `grupo`, `razao_social`, `responsavel_conta` ✓ (typo corrigido de "resposanvel_conta")
-- `financeiro`, `corte`, `faixa`, `sk_id` (PK)
+**bronze.contas** (6 records):
+- `cnpj_cpf`, `tipo`, `status`, `status_qualificacao_da_conta`
+- `data_criacao`, `grupo`, `razao_social`, `responsavel_conta`
+- `financeiro`, `corte`, `faixa`, `sk_id` (surrogate key)
 
 **bronze.usuarios** (6 records):
-- `nome_empresa`, `Nome`, `area`, `senioridade`, `gestor`, `email`
-- `canal_1`, `canal_2` ✓ (renomeado de "canal 1", "canal 2")
-- `email_lider`, `sk_id` (PK)
+- `nome_empresa`, `nome`, `area`, `senioridade`, `gestor`, `email`
+- `canal_1`, `canal_2`
+- `email_lider`, `sk_id` (surrogate key)
 
-**bronze.faturamento** (9 records):
-- `data`, `receita`, `moeda`, `cnpj_cliente`, `email_usuario`, `sk_id` (PK)
+**bronze.faturamentos** (9 records):
+- `data`, `receita`, `moeda`, `cnpj_cliente`, `email_usuario`, `sk_id` (surrogate key)
 
-**bronze.data** (no PK required - reference table):
+**bronze.data** (4,018 records - PK: data_completa):
 - `data_completa`, `ano`, `mes`, `dia`, `bimestre`, `trimestre`, `quarter`, `semestre`
 
 ## Adding a New CSV Ingestor (v2.0)
@@ -317,7 +327,7 @@ Colunas nomeadas como `data_*` ou `dt_*` são automaticamente formatadas para `Y
 4. Add CSV file to `docker/data/input/onedrive/`
 5. Create corresponding Bronze table in PostgreSQL
 6. Create database migration for `credits.logs_rejeicao` if not exists
-7. Add ingestor instance to `python/run_all_ingestors.py` if it should run with all ingestors
+7. Add ingestor instance to `python/run_bronze_ingestors.py` if it should run with all ingestors
 
 **Migration Required for v2.0:**
 Ensure `credits.logs_rejeicao` table exists. See `RESUMO_REFATORACAO_BRONZE.md` for SQL schema.
@@ -329,70 +339,63 @@ The Silver layer implements a **Star Schema** with dimensions and fact tables, a
 ### Silver Tables
 
 **Dimensions:**
-- `silver.dim_tempo` ✓ **(4,018 registros)**
+- `silver.dim_data` ✓ **(4,018 registros)**
   - PK: `sk_data` (integer)
   - Natural Key: `data_completa` (date, UNIQUE)
   - Atributos: ano, mes, dia, trimestre, semestre, nome_mes, dia_semana, flags (fim_semana, dia_util, feriado)
+  - Transformer: `transform_dim_data.py`
 
-- `silver.dim_clientes` ✅ **(9 registros)**
+- `silver.dim_cliente` ✅ **(9 registros)**
   - PK: `sk_cliente` (integer)
   - Natural Key: `nk_cnpj_cpf` (varchar, com versioning)
   - SCD Type 2: `data_inicio`, `data_fim`, `flag_ativo`, `versao`, `hash_registro`, `motivo_mudanca`
   - UNIQUE: `uk_cliente_cnpj_versao` (nk_cnpj_cpf + versao)
+  - Transformer: `transform_dim_cliente.py`
 
-- `silver.dim_usuarios` ✅ **(5 registros)**
+- `silver.dim_usuario` ✅ **(5 registros)**
   - PK: `sk_usuario` (integer)
   - Natural Key: `nk_usuario` (varchar, email limpo)
-  - FK: `sk_gestor` → `dim_usuarios.sk_usuario` (hierarquia self-referencing)
+  - FK: `sk_gestor` → `dim_usuario.sk_usuario` (hierarquia self-referencing)
   - SCD Type 2: `data_inicio`, `data_fim`, `flag_ativo`, `versao`, `hash_registro`
-
-- `silver.dim_canal` ✅ **(7 registros)**
-  - PK: `sk_canal` (integer)
-  - Natural Key: `tipo_canal` + `nome_canal` (combinação única)
-  - Atributos: categoria_canal, prioridade, comissao_percentual, meta_mensal
+  - Transformer: `transform_dim_usuario.py`
 
 **Facts:**
-- `silver.fact_faturamento` ✅ **(9 registros)**
+- `silver.fato_faturamento` ✅ **(9 registros)**
   - PK: `sk_faturamento` (bigint)
   - FKs:
-    - `sk_cliente` → `dim_clientes.sk_cliente`
-    - `sk_usuario` → `dim_usuarios.sk_usuario`
-    - `sk_data` → `dim_tempo.sk_data`
-    - `sk_canal` → `dim_canal.sk_canal`
-  - Measures: `valor_bruto`, `valor_liquido`, `valor_desconto`, `valor_imposto`, `valor_comissao`
-  - Degenerate Dimensions: `numero_documento`, `tipo_documento`, `moeda`, `forma_pagamento`, `status_pagamento`
-  - UNIQUE: `uk_fact_faturamento_hash` (hash_transacao para idempotência)
+    - `sk_cliente` → `dim_cliente.sk_cliente`
+    - `sk_usuario` → `dim_usuario.sk_usuario`
+    - `sk_data` → `dim_data.sk_data`
+  - Measures: `valor_bruto`, `valor_liquido`, `valor_desconto`, `valor_imposto`
+  - Degenerate Dimensions: `moeda`
+  - UNIQUE: `uk_fato_faturamento_hash` (hash_transacao para idempotência)
+  - Transformer: `transform_fato_faturamento.py`
 
 ### Star Schema Diagram
 
 ```
                     ┌─────────────────┐
-                    │  dim_tempo      │
+                    │  dim_data       │
                     │  PK: sk_data    │◄─────┐
                     │  UK: data_comp  │      │
                     └─────────────────┘      │
                                              │
     ┌─────────────────┐              ┌──────┴──────────────┐
-    │  dim_clientes   │              │ fact_faturamento    │
+    │  dim_cliente    │              │ fato_faturamento    │
     │  PK: sk_cliente │◄─────────────┤ PK: sk_faturamento  │
     │  UK: cnpj+ver   │              │ FK: sk_data         │
     │  SCD Type 2     │              │ FK: sk_cliente      │
     └─────────────────┘              │ FK: sk_usuario      │
-                                     │ FK: sk_canal        │
-    ┌─────────────────┐              │ UK: hash_transacao  │
-    │  dim_usuarios   │              └──────┬──────────────┘
-    │  PK: sk_usuario │◄─────────────────────┘
-    │  FK: sk_gestor ─┼──┐                   │
-    │  SCD Type 2     │  │                   │
-    └─────────────────┘  │                   │
-              ▲          │                   │
-              └──────────┘                   │
-           (hierarquia)                      │
-                                     ┌───────▼──────────┐
-                                     │  dim_canal       │
-                                     │  PK: sk_canal    │
-                                     │  UK: tipo+nome   │
-                                     └──────────────────┘
+                                     │ UK: hash_transacao  │
+    ┌─────────────────┐              └──────┬──────────────┘
+    │  dim_usuario    │◄─────────────────────┘
+    │  PK: sk_usuario │
+    │  FK: sk_gestor ─┼──┐
+    │  SCD Type 2     │  │
+    └─────────────────┘  │
+              ▲          │
+              └──────────┘
+           (hierarquia)
 ```
 
 ### Transformer Pattern
@@ -410,37 +413,34 @@ All Silver transformers inherit from `BaseSilverTransformer` in `python/transfor
 - `calcular_hash_registro()`: Generate MD5 hash for change detection
 
 **Execution:**
-- Run all transformers: `python python/run_silver_transformations.py`
+- Run all transformers: `python python/run_silver_transformers.py`
 - Control table `credits.silver_control` tracks last execution timestamps and dependencies
 
 **Implementation Status:**
 - ✅ `BaseTransformer`: Fully implemented with SCD Type 2 support
-- ✅ `transform_dim_tempo.py`: Fully implemented with calendar enrichment
-- ✅ `transform_dim_canal.py`: Fully implemented
-- ✅ `transform_dim_clientes.py`: Fully implemented with SCD Type 2
-- ✅ `transform_dim_usuarios.py`: Fully implemented with SCD Type 2 and hierarchy resolution
-- ✅ `transform_fact_faturamento.py`: Fully implemented with FK validation
+- ✅ `transform_dim_data.py`: Fully implemented with calendar enrichment
+- ✅ `transform_dim_cliente.py`: Fully implemented with SCD Type 2
+- ✅ `transform_dim_usuario.py`: Fully implemented with SCD Type 2 and hierarchy resolution
+- ✅ `transform_fato_faturamento.py`: Fully implemented with FK validation
 
 ### Bronze to Silver Mapping
 
 | Bronze Table | Records | Silver Table | Records | Transformation Type |
 |--------------|---------|--------------|---------|---------------------|
-| `bronze.data` | 4,018 | `silver.dim_tempo` | 4,018 ✅ | Enrichment (business calendar) |
-| `bronze.contas_base_oficial` | 6 | `silver.dim_clientes` | 9 ✅ | SCD Type 2, data quality, CNPJ/CPF formatting |
-| `bronze.usuarios` | 6 | `silver.dim_usuarios` | 5 ✅ | SCD Type 2, hierarchy resolution (gestor) |
-| `bronze.usuarios` | 6 | `silver.dim_canal` | 7 ✅ | Extract & normalize (canal_1, canal_2) |
-| `bronze.faturamento` | 9 | `silver.fact_faturamento` | 9 ✅ | FK resolution, measures calculation |
+| `bronze.data` | 4,018 | `silver.dim_data` | 4,018 ✅ | Enrichment (business calendar) |
+| `bronze.contas` | 6 | `silver.dim_cliente` | 9 ✅ | SCD Type 2, data quality, CNPJ/CPF formatting |
+| `bronze.usuarios` | 6 | `silver.dim_usuario` | 5 ✅ | SCD Type 2, hierarchy resolution (gestor) |
+| `bronze.faturamentos` | 9 | `silver.fato_faturamento` | 9 ✅ | FK resolution, measures calculation |
 
 **Transformation Details:**
-- **dim_tempo**: Enriches date with fiscal calendar, holidays, work days flags
-- **dim_clientes**: Standardizes CNPJ/CPF, applies business rules (porte_empresa, categoria_risco, tempo_cliente_dias)
-- **dim_usuarios**: Resolves manager hierarchy (email_lider → sk_gestor FK), splits channel data
-- **dim_canal**: Extracts unique channels from usuarios (canal_1, canal_2), adds commission/targets
-- **fact_faturamento**: Resolves all dimension FKs, calculates derived measures (valor_liquido = valor_bruto - valor_desconto)
+- **dim_data**: Enriches date with fiscal calendar, holidays, work days flags
+- **dim_cliente**: Standardizes CNPJ/CPF, applies business rules (porte_empresa, categoria_risco, tempo_cliente_dias)
+- **dim_usuario**: Resolves manager hierarchy (email_lider → sk_gestor FK)
+- **fato_faturamento**: Resolves all dimension FKs, calculates derived measures (valor_liquido = valor_bruto - valor_desconto)
 
 ### SCD Type 2 Implementation
 
-Dimensions `dim_clientes` and `dim_usuarios` use SCD Type 2:
+Dimensions `dim_cliente` and `dim_usuario` use SCD Type 2:
 - `data_inicio` / `data_fim`: Valid date range
 - `flag_ativo`: Current record indicator (boolean)
 - `versao`: Version number
@@ -650,14 +650,13 @@ ORDER BY h.data_inicio DESC;
 **2. Índices Adicionais (Future)**
 ```sql
 -- Melhorar performance de lookups FK
-CREATE INDEX idx_fk_cliente ON silver.fact_faturamento(sk_cliente);
-CREATE INDEX idx_fk_data ON silver.fact_faturamento(sk_data);
-CREATE INDEX idx_fk_usuario ON silver.fact_faturamento(sk_usuario);
-CREATE INDEX idx_fk_canal ON silver.fact_faturamento(sk_canal);
+CREATE INDEX idx_fk_cliente ON silver.fato_faturamento(sk_cliente);
+CREATE INDEX idx_fk_data ON silver.fato_faturamento(sk_data);
+CREATE INDEX idx_fk_usuario ON silver.fato_faturamento(sk_usuario);
 
 -- Melhorar SCD Type 2 queries
-CREATE INDEX idx_clientes_ativo ON silver.dim_clientes(flag_ativo, nk_cnpj_cpf);
-CREATE INDEX idx_usuarios_ativo ON silver.dim_usuarios(flag_ativo, nk_usuario);
+CREATE INDEX idx_clientes_ativo ON silver.dim_cliente(flag_ativo, nk_cnpj_cpf);
+CREATE INDEX idx_usuarios_ativo ON silver.dim_usuario(flag_ativo, nk_usuario);
 ```
 
 **3. Constraints Validation**
@@ -745,7 +744,7 @@ CREATE INDEX idx_usuarios_ativo ON silver.dim_usuarios(flag_ativo, nk_usuario);
    - Regression tests for SCD Type 2 logic
 
 3. **Performance optimizations:**
-   - Add FK indexes on `silver.fact_faturamento` if queries are slow
+   - Add FK indexes on `silver.fato_faturamento` if queries are slow
    - Consider parallelizing validation for large CSVs (>100K rows)
    - Optimize SCD Type 2 queries with partial indexes
 

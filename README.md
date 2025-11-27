@@ -1,8 +1,8 @@
-# Credits Brasil - Data Warehouse (v4.0)
+# Credits Brasil - Data Warehouse (v4.1)
 
 Pipeline ETL moderno para consolidação de dados financeiros, implementando uma arquitetura Medallion (Bronze e Silver) com um modelo dimensional Star Schema e um sistema rigoroso de validação de dados na camada de entrada.
 
-**Versão:** 4.0 (Novembro de 2025 - Refatoração com Validação Rigorosa na Bronze)
+**Versão:** 4.1 (Novembro de 2025 - Padronização CNPJ/CPF e Melhorias Gerais)
 
 ## 📋 Sumário
 
@@ -59,15 +59,14 @@ graph TD
 
 ---
 
-## ✨ Principais Melhorias (v4.0)
+## 🎯 Características Principais
 
-Esta versão representa uma grande evolução na confiabilidade do pipeline:
-
-1.  **Validação Rigorosa na Bronze:** Garante que apenas dados de alta qualidade entrem no DW, movendo a responsabilidade da limpeza para a porta de entrada.
-2.  **Logs de Rejeição:** Cria uma trilha de auditoria completa para todos os dados que não foram carregados, explicando o motivo da falha e permitindo a correção na origem.
-3.  **Template Method Pattern:** Padroniza a criação de novos ingestores e transformadores, reduzindo a duplicação de código e o risco de erros.
-4.  **Segurança e Idempotência:** Proteção contra SQL Injection e garantia de que as execuções podem ser repetidas sem efeitos colaterais indesejados.
-5.  **Código Limpo:** Adoção de `Type Hints`, `docstrings` e princípios de código limpo para facilitar a manutenção.
+-   **Validação Rigorosa:** Sistema completo de validação na camada Bronze com logs detalhados de rejeições
+-   **Padronização de Dados:** CNPJ/CPF formatados automaticamente (limpo + formatado)
+-   **SCD Type 2:** Histórico de mudanças em dimensões críticas (clientes e usuários)
+-   **Star Schema:** Modelo dimensional otimizado para análises e BI
+-   **Auditoria Completa:** Rastreamento de todas as execuções e rejeições
+-   **Docker:** Ambiente completamente containerizado para fácil deployment
 
 ---
 

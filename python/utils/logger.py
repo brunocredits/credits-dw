@@ -73,30 +73,33 @@ def setup_logger(name: str, log_dir: str = None, rotation: str = "100 MB", reten
     return logger
 
 
-def log_dataframe_info(df, nome: str = "DataFrame") -> None:
+def log_dataframe_info(df, nome: str = "DataFrame", logger_obj=None) -> None:
     """
     Loga informações detalhadas sobre um DataFrame.
 
     Args:
         df: DataFrame pandas
         nome: Nome descritivo do DataFrame
+        logger_obj: Objeto logger a ser usado (padrão: logger global do módulo)
     """
-    logger.info(f"📊 {nome} - Informações:")
-    logger.info(f"   • Shape: {df.shape[0]:,} linhas x {df.shape[1]} colunas")
-    logger.info(f"   • Colunas: {list(df.columns)}")
-    logger.info(f"   • Memória: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+    logger_to_use = logger_obj if logger_obj else logger
+
+    logger_to_use.info(f"📊 {nome} - Informações:")
+    logger_to_use.info(f"   • Shape: {df.shape[0]:,} linhas x {df.shape[1]} colunas")
+    logger_to_use.info(f"   • Colunas: {list(df.columns)}")
+    logger_to_use.info(f"   • Memória: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
 
     # Valores nulos
     nulls = df.isnull().sum()
     if nulls.sum() > 0:
-        logger.warning(f"   • Valores nulos detectados:")
+        logger_to_use.warning(f"   • Valores nulos detectados:")
         for col, count in nulls[nulls > 0].items():
-            logger.warning(f"     - {col}: {count:,} ({count/len(df)*100:.1f}%)")
+            logger_to_use.warning(f"     - {col}: {count:,} ({count/len(df)*100:.1f}%)")
     else:
-        logger.success(f"   • Sem valores nulos ✓")
+        logger_to_use.success(f"   • Sem valores nulos ✓")
 
     # Tipos de dados
-    logger.debug(f"   • Tipos de dados: {df.dtypes.to_dict()}")
+    logger_to_use.debug(f"   • Tipos de dados: {df.dtypes.to_dict()}")
 
 
 def log_execution_summary(

@@ -37,10 +37,10 @@ from utils.rejection_logger import RejectionLogger
 
 # Whitelist de tabelas permitidas (segurança contra SQL injection)
 TABELAS_PERMITIDAS = {
-    'bronze.contas_base_oficial',
+    'bronze.contas',
     'bronze.usuarios',
-    'bronze.faturamento',
-    'bronze.data'
+    'bronze.faturamentos',
+    'bronze.calendario'  # Ex-bronze.data
 }
 
 
@@ -294,6 +294,9 @@ class BaseCSVIngestor(ABC):
         """
         self.logger.info("Validando dados rigorosamente...")
 
+        # Limpeza de valores nulos antes da validação
+        df = df.replace({pd.NA: None, pd.NaT: None}).where(pd.notna(df), None)
+
         regras = self.get_validation_rules()
         indices_validos = []
         total_linhas = len(df)
@@ -527,28 +530,36 @@ class BaseCSVIngestor(ABC):
             conn = get_db_connection()
             self.logger.success("Conectado ao banco de dados")
 
-            execucao_id = registrar_execucao(
+            execucao_fk = registrar_execucao(
                 conn=conn,
                 script_nome=self.script_name,
                 camada='bronze',
                 tabela_origem=None,
                 tabela_destino=self.tabela_destino
             )
-            self.logger.info(f"Execução registrada: {execucao_id}")
+            self.logger.info(f"Execução registrada com ID: {execucao_fk}")
 
             # Inicializar rejection logger
             self.rejection_logger = RejectionLogger(
                 conn=conn,
-                execucao_id=execucao_id,
+                execucao_fk=execucao_fk,
                 script_nome=self.script_name,
                 tabela_destino=self.tabela_destino
             )
 
             # ================================================================
-            # FASE 2: LEITURA E VALIDAÇÃO
+            # FASE 2: LEITURA, DEDUPLICAÇÃO E VALIDAÇÃO
             # ================================================================
             # Ler CSV
             df_raw = self.ler_csv()
+
+            # Etapa de Deduplicação de registros exatos
+            if not df_raw.empty:
+                linhas_antes = len(df_raw)
+                df_raw.drop_duplicates(inplace=True)
+                linhas_depois = len(df_raw)
+                if linhas_antes > linhas_depois:
+                    self.logger.info(f"Deduplicação: {linhas_antes - linhas_depois} linhas duplicadas exatas foram removidas.")
 
             # Validar estrutura (colunas presentes)
             self.validar_colunas_csv(df_raw)
@@ -596,7 +607,7 @@ class BaseCSVIngestor(ABC):
             # Finalizar execução (auditoria)
             finalizar_execucao(
                 conn=conn,
-                execucao_id=execucao_id,
+                execucao_id=execucao_fk,
                 status='sucesso',
                 linhas_processadas=total_processado,
                 linhas_inseridas=linhas_inseridas,
@@ -626,10 +637,10 @@ class BaseCSVIngestor(ABC):
                 conn.rollback()
                 self.logger.warning("Transação revertida (ROLLBACK)")
 
-                if execucao_id:
+                if execucao_fk:
                     finalizar_execucao(
                         conn=conn,
-                        execucao_id=execucao_id,
+                        execucao_id=execucao_fk,
                         status='erro',
                         mensagem_erro=str(e)
                     )
