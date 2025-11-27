@@ -82,8 +82,7 @@ class TransformDimData(BaseSilverTransformer):
         full_calendar AS (
             SELECT
                 ds.calendar_date,
-                -- Chaves e Componentes da Data
-                EXTRACT(YEAR FROM ds.calendar_date)::integer * 10000 + EXTRACT(MONTH FROM ds.calendar_date)::integer * 100 + EXTRACT(DAY FROM ds.calendar_date)::integer as data_sk,
+                -- Componentes da Data (data_sk será auto-gerado pelo SERIAL)
                 EXTRACT(YEAR FROM ds.calendar_date)::smallint AS ano,
                 EXTRACT(MONTH FROM ds.calendar_date)::smallint AS mes,
                 EXTRACT(DAY FROM ds.calendar_date)::smallint AS dia,
@@ -113,18 +112,18 @@ class TransformDimData(BaseSilverTransformer):
             WHERE ds.calendar_date IS NOT NULL
         )
 
-        -- 3. Insere os dados na tabela Silver
+        -- 3. Insere os dados na tabela Silver (data_sk é auto-gerado pelo SERIAL)
         INSERT INTO silver.dim_data (
-            data_sk, data_completa, ano, mes, dia, trimestre, semestre, bimestre,
+            data_completa, ano, mes, dia, trimestre, semestre, bimestre,
             nome_trimestre, nome_mes, nome_mes_abrev, nome_dia_semana, nome_dia_semana_abrev,
             dia_semana, semana_ano, semana_mes, flag_fim_semana, flag_dia_util
         )
         SELECT
-            data_sk, calendar_date, ano, mes, dia, trimestre, semestre, bimestre,
+            calendar_date, ano, mes, dia, trimestre, semestre, bimestre,
             nome_trimestre, nome_mes, nome_mes_abrev, nome_dia_semana, nome_dia_semana_abrev,
             dia_semana, semana_ano, semana_mes, flag_fim_semana, flag_dia_util
         FROM full_calendar
-        ON CONFLICT (data_sk) DO NOTHING;
+        ON CONFLICT (data_completa) DO NOTHING;
         """
         with get_cursor(conn) as cur:
             self.logger.info(f"[SILVER][INFO] {self.script_name}: Truncando tabela {self.tabela_destino}.")
