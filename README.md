@@ -1,8 +1,8 @@
-# Credits Brasil - Data Warehouse (v4.1)
+# Credits Brasil - Data Warehouse (v4.2)
 
-Pipeline ETL moderno para consolidação de dados financeiros, implementando uma arquitetura Medallion (Bronze e Silver) com um modelo dimensional Star Schema e um sistema rigoroso de validação de dados na camada de entrada.
+Pipeline ETL moderno para consolidação de dados financeiros, implementando uma arquitetura Medallion completa (Bronze/Silver/Gold) com um modelo dimensional Star Schema e um sistema rigoroso de validação de dados na camada de entrada.
 
-**Versão:** 4.2 (Novembro de 2025 - Pipeline 100% Docker + Limpeza Completa)
+**Versão:** 4.2 (Novembro de 2025 - Pipeline 100% Docker + Gold Layer)
 
 ## 📋 Sumário
 
@@ -27,7 +27,8 @@ A arquitetura segue o padrão **Medallion**, com um fluxo de dados claro entre a
 graph TD
     A[Arquivos CSV] --> B{Camada Bronze};
     B --> C{Camada Silver};
-    C --> D[Análises e BI];
+    C --> D{Camada Gold};
+    D --> E[Análises e BI];
 
     subgraph Camada Bronze
         direction LR
@@ -39,8 +40,14 @@ graph TD
         C_IN[Transformações] --> C_OUT[Star Schema];
     end
 
+    subgraph Camada Gold
+        direction LR
+        D_IN[Views SQL] --> D_OUT[Métricas de Negócio];
+    end
+
     style B fill:#CD7F32,stroke:#333,stroke-width:2px
     style C fill:#C0C0C0,stroke:#333,stroke-width:2px
+    style D fill:#FFD700,stroke:#333,stroke-width:2px
 ```
 
 ### Camadas de Dados
@@ -57,6 +64,17 @@ graph TD
 -   **Estratégia:** Cargas incrementais e **SCD Type 2 (Slowly Changing Dimensions)** para dimensões que precisam de histórico de mudanças (ex: `dim_clientes`, `dim_usuarios`).
 -   **Modelo:** **Star Schema**, composto por tabelas Fato (métricas de negócio) e Dimensões (contexto descritivo), otimizado para consultas analíticas.
 
+#### 🥇 Camada Gold (`schema: gold`)
+
+-   **Propósito:** Disponibilizar métricas de negócio agregadas e KPIs prontos para consumo por ferramentas de BI e dashboards.
+-   **Estratégia:** **SQL Views** que referenciam a camada Silver. Não há ETL - as views são **auto-atualizadas** quando Silver é carregada.
+-   **Vantagens:** Zero latência de atualização, sem processamento adicional, queries otimizadas para análise.
+-   **Views disponíveis:**
+    -   `vendas_diarias` - Vendas por dia e consultor
+    -   `vendas_mensais` - Agregação mensal de receitas
+    -   `carteira_clientes` - Status consolidado da carteira
+    -   `performance_consultores` - KPIs por consultor (clientes, transações, receita)
+
 ---
 
 ## 🎯 Características Principais
@@ -68,6 +86,7 @@ graph TD
 -   **Star Schema:** Modelo dimensional (4 dimensões + 1 fato) otimizado para BI
 -   **SCD Type 2:** Versionamento automático para rastreamento de mudanças históricas
 -   **Integridade Referencial:** FK constraints garantem consistência entre fatos e dimensões
+-   **Gold Layer Auto-Atualizada:** Views SQL que atualizam instantaneamente quando Silver muda
 
 ---
 
@@ -175,7 +194,23 @@ Após a carga da Bronze, este script executa as transformações para popular as
 docker compose -f docker/docker-compose.yml exec etl-processor python python/run_silver_transformations.py
 ```
 
-### 4. Parar o Ambiente
+**Nota:** A camada Gold (views) se auto-atualiza automaticamente quando Silver é carregada. Não é necessário executar nenhum processo adicional.
+
+### 4. Consultar Métricas (Camada Gold)
+
+Após a carga da Silver, as views Gold já estarão disponíveis:
+
+```bash
+# Conectar ao banco
+docker compose -f docker/docker-compose.yml exec etl-processor psql -h $DB_HOST -U $DB_USER -d $DB_NAME
+
+# Exemplos de queries
+SELECT * FROM gold.vendas_diarias ORDER BY data_completa DESC LIMIT 10;
+SELECT * FROM gold.performance_consultores WHERE total_transacoes > 0;
+SELECT * FROM gold.vendas_mensais ORDER BY ano DESC, mes DESC;
+```
+
+### 5. Parar o Ambiente
 
 Para desligar os containers, utilize:
 
