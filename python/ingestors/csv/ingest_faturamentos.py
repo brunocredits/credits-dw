@@ -31,11 +31,11 @@ class IngestFaturamentos(BaseCSVIngestor):
     def get_column_mapping(self) -> Dict[str, str]:
         """Mapeia colunas do CSV para colunas do banco de dados."""
         return {
-            'data': 'data',
-            'receita': 'receita',
-            'moeda': 'moeda',
-            'cnpj_cliente': 'cnpj_cliente',
-            'email_usuario': 'email_usuario'
+            'Data': 'data',
+            'Receita': 'receita',
+            'Moeda': 'moeda',
+            'CNPJ Cliente': 'cnpj_cliente',
+            'Email Usuario': 'email_usuario'
         }
 
     def get_bronze_columns(self) -> List[str]:

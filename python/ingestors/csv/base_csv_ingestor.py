@@ -613,6 +613,7 @@ class BaseCSVIngestor(ABC):
                 linhas_inseridas=linhas_inseridas,
                 linhas_erro=num_rejeitados
             )
+            conn.commit()  # Persistir atualização de auditoria
 
             # Log de resumo
             log_execution_summary(
@@ -644,6 +645,7 @@ class BaseCSVIngestor(ABC):
                         status='erro',
                         mensagem_erro=str(e)
                     )
+                    conn.commit()  # Persistir atualização de auditoria
 
             # Log de resumo de erro
             log_execution_summary(

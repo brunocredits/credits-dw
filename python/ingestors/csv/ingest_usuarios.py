@@ -31,15 +31,15 @@ class IngestUsuarios(BaseCSVIngestor):
     def get_column_mapping(self) -> Dict[str, str]:
         """Mapeia colunas do CSV para colunas do banco de dados."""
         return {
-            'nome_empresa': 'nome_empresa',
-            'nome': 'nome',
-            'area': 'area',
-            'senioridade': 'senioridade',
-            'gestor': 'gestor',
-            'email': 'email',
-            'canal_1': 'canal_1',
-            'canal_2': 'canal_2',
-            'email_lider': 'email_lider'
+            'Nome Empresa': 'nome_empresa',
+            'Nome': 'nome',
+            'Área': 'area',
+            'Senioridade': 'senioridade',
+            'Gestor': 'gestor',
+            'Email': 'email',
+            'Canal 1': 'canal_1',
+            'Canal 2': 'canal_2',
+            'Email Líder': 'email_lider'
         }
 
     def get_bronze_columns(self) -> List[str]:

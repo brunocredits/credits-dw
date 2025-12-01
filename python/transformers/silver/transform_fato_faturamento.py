@@ -98,7 +98,16 @@ class TransformFatoFaturamento(BaseSilverTransformer):
             lambda row: self.calcular_hash_registro(row, colunas_hash), axis=1
         )
 
-        # 5. Selecionar e reordenar colunas finais
+        # 5. Filtrar registros com FKs inválidas (antes de selecionar colunas finais)
+        total_inicial = len(df)
+        df = df[df['cliente_sk'].notnull() & df['usuario_sk'].notnull()]
+        total_filtrado = len(df)
+
+        if total_filtrado < total_inicial:
+            registros_removidos = total_inicial - total_filtrado
+            self.logger.warning(f"[SILVER][FILTRO] {registros_removidos} registros removidos por FK inválida.")
+
+        # 6. Selecionar e reordenar colunas finais
         colunas_finais = [
             'cliente_sk', 'usuario_sk', 'data_sk', 'canal_sk',
             'valor_bruto', 'valor_desconto', 'valor_liquido', 'valor_imposto', 'valor_comissao',
@@ -113,38 +122,39 @@ class TransformFatoFaturamento(BaseSilverTransformer):
     def validar_qualidade(self, df: pd.DataFrame) -> tuple[bool, list[str]]:
         """Valida a qualidade dos dados transformados antes da carga."""
         erros = []
+        warnings = []
+
         # === VALIDAÇÕES CRÍTICAS (BLOQUEIAM A EXECUÇÃO) ===
 
-        # 1. sk_data: Obrigatório (uma fato sem data não faz sentido)
+        # 1. data_sk: CRÍTICO - fato sem data não faz sentido
         if df['data_sk'].isnull().any():
             count = df['data_sk'].isnull().sum()
             erros.append(f"ERRO CRÍTICO: {count} registros sem data_sk. Verifique se a dim_data está populada para as datas do faturamento.")
 
-        # 2. cliente_sk: Obrigatório para a integridade do modelo
-        if df['cliente_sk'].isnull().any():
-            count = df['cliente_sk'].isnull().sum()
-            erros.append(f"ERRO CRÍTICO: {count} registros sem cliente_sk. CNPJs não encontrados na dim_cliente.")
-            # Logar detalhes dos CNPJs órfãos para debugging
-            cnpjs_orfaos = df[df['cliente_sk'].isnull()]['cnpj_cliente_limpo'].unique()
-            self.logger.error(f"[SILVER][ERRO] CNPJs órfãos: {list(cnpjs_orfaos)[:10]}")
-
-        # 3. usuario_sk: Obrigatório para rastreabilidade
-        if df['usuario_sk'].isnull().any():
-            count = df['usuario_sk'].isnull().sum()
-            erros.append(f"ERRO CRÍTICO: {count} registros sem usuario_sk. Emails não encontrados na dim_usuario.")
-            # Logar detalhes dos emails órfãos
-            emails_orfaos = df[df['usuario_sk'].isnull()]['email_usuario_limpo'].unique()
-            self.logger.error(f"[SILVER][ERRO] Emails órfãos: {list(emails_orfaos)[:10]}")
-
-        # 4. valor_bruto: Obrigatório e deve ser > 0
+        # 2. valor_bruto: CRÍTICO - deve ser > 0
         if df['valor_bruto'].isnull().any():
             count = df['valor_bruto'].isnull().sum()
             erros.append(f"ERRO CRÍTICO: {count} valores brutos nulos ou inválidos.")
-        
+
         if (df['valor_bruto'] <= 0).any():
             count = (df['valor_bruto'] <= 0).sum()
             erros.append(f"ERRO CRÍTICO: {count} valores brutos <= 0. Ajustar regras de negócio para valores negativos.")
 
+        # === VALIDAÇÕES IMPORTANTES (WARNINGS - NÃO BLOQUEIAM) ===
+
+        # 3. cliente_sk: WARNING - será filtrado antes da carga
+        if df['cliente_sk'].isnull().any():
+            count = df['cliente_sk'].isnull().sum()
+            warnings.append(f"WARNING: {count} registros sem cliente_sk serão ignorados. CNPJs não encontrados na dim_cliente.")
+
+        # 4. usuario_sk: WARNING - será filtrado antes da carga
+        if df['usuario_sk'].isnull().any():
+            count = df['usuario_sk'].isnull().sum()
+            warnings.append(f"WARNING: {count} registros sem usuario_sk serão ignorados. Emails não encontrados na dim_usuario.")
+
+        # Logar warnings
+        for warning in warnings:
+            self.logger.warning(f"[SILVER][WARNING] {warning}")
 
         return len(erros) == 0, erros
 

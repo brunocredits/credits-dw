@@ -31,17 +31,17 @@ class IngestContas(BaseCSVIngestor):
     def get_column_mapping(self) -> Dict[str, str]:
         """Mapeia colunas do CSV para colunas do banco de dados."""
         return {
-            'cnpj_cpf': 'cnpj_cpf',
-            'tipo': 'tipo',
-            'status': 'status',
-            'status_qualificacao': 'status_qualificacao',
-            'data_criacao': 'data_criacao',
-            'grupo': 'grupo',
-            'razao_social': 'razao_social',
-            'responsavel_conta': 'responsavel_conta',
-            'financeiro': 'financeiro',
-            'corte': 'corte',
-            'faixa': 'faixa'
+            'CNPJ/CPF': 'cnpj_cpf',
+            'Tipo': 'tipo',
+            'Status': 'status',
+            'Status Qualificação da Conta': 'status_qualificacao',
+            'Data Criação': 'data_criacao',
+            'Grupo': 'grupo',
+            'Razão Social': 'razao_social',
+            'Responsável Conta': 'responsavel_conta',
+            'Financeiro': 'financeiro',
+            'Corte': 'corte',
+            'Faixa': 'faixa'
         }
 
     def get_bronze_columns(self) -> List[str]:
@@ -71,7 +71,8 @@ class IngestContas(BaseCSVIngestor):
             'status': {
                 'obrigatorio': True,
                 'tipo': 'string',
-                'dominio': ['Ativo', 'Inativo', 'Suspenso']
+                'dominio': ['ATIVO', 'INATIVO', 'SUSPENSO'],
+                'case_sensitive': False
             },
             'status_qualificacao': {
                 'obrigatorio': False,
