@@ -16,16 +16,18 @@ from typing import List, Dict, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Importar as classes de ingestão refatoradas
-from ingestors.csv.ingest_contas import IngestContas
+from ingestors.csv.ingest_base_oficial import IngestBaseOficial
 from ingestors.csv.ingest_faturamentos import IngestFaturamentos
 from ingestors.csv.ingest_usuarios import IngestUsuarios
+from ingestors.csv.ingest_calendario import IngestCalendario
 from utils.logger import setup_logger
 from utils.config import get_etl_config
 
 
 # Mapeamento de nomes para classes de ingestores
 INGESTORS_REGISTRY = {
-    'contas': IngestContas,
+    'calendario': IngestCalendario,
+    'base_oficial': IngestBaseOficial,
     'faturamentos': IngestFaturamentos,
     'usuarios': IngestUsuarios
 }
@@ -129,10 +131,18 @@ class OrquestradorBronze:
         """Executa o pipeline de ingestores."""
         start_time = time.time()
 
+        # Prioridade para calendário
+        always_first = ['calendario']
+        
         if ingestor_names:
-            ingestors = [(nome, INGESTORS_REGISTRY[nome]) for nome in ingestor_names if nome in INGESTORS_REGISTRY]
+            names = [n for n in ingestor_names if n in INGESTORS_REGISTRY]
         else:
-            ingestors = list(INGESTORS_REGISTRY.items())
+            names = list(INGESTORS_REGISTRY.keys())
+            
+        # Reordenar para garantir que calendario rode primeiro
+        ordered_names = [n for n in always_first if n in names] + [n for n in names if n not in always_first]
+        
+        ingestors = [(nome, INGESTORS_REGISTRY[nome]) for nome in ordered_names]
 
         if not ingestors:
             self.logger.error("[BRONZE][FALHA] Nenhum ingestor válido para executar.")
@@ -144,12 +154,28 @@ class OrquestradorBronze:
         self.logger.info(f"   - Ingestores a executar: {', '.join([n for n, _ in ingestors])}")
         self.logger.info("=" * 80)
 
-        resultados = self.executar_paralelo(ingestors, max_workers) if paralelo else self.executar_sequencial(ingestors)
+        # Se calendário estiver na lista, executá-lo isoladamente primeiro para garantir dependência
+        # (embora aqui não haja chave estrangeira forte, é boa prática conforme pedido)
+        final_results = []
+        
+        if 'calendario' in ordered_names:
+            cal_idx = next(i for i, (n, _) in enumerate(ingestors) if n == 'calendario')
+            cal_ingestor = ingestors.pop(cal_idx)
+            self.logger.info("[BRONZE] Executando Calendário primeiro (Prioridade)...")
+            final_results.append(self.executar_ingestor(*cal_ingestor))
+            if not final_results[0]['sucesso']:
+                 self.logger.error("[BRONZE] Falha na geração do calendário. Abortando pipeline?")
+                 # Opcional: abortar. Mas vou seguir.
+
+        # Restante
+        if ingestors:
+            results = self.executar_paralelo(ingestors, max_workers) if paralelo else self.executar_sequencial(ingestors)
+            final_results.extend(results)
         
         duracao_total = time.time() - start_time
-        self.imprimir_resumo(resultados, duracao_total)
+        self.imprimir_resumo(final_results, duracao_total)
         
-        return 0 if all(r['sucesso'] for r in resultados) else 1
+        return 0 if all(r['sucesso'] for r in final_results) else 1
 
 
 def parse_args():

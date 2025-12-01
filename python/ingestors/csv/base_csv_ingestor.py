@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """
 Módulo: base_csv_ingestor.py
-Descrição: Classe base para ingestão CSV na camada Bronze com validação rigorosa
-Versão: 2.0
+Descrição: Classe base para ingestão CSV na camada Bronze (Raw/Permissive)
+Versão: 3.0
 
-IMPORTANTE: A camada Bronze agora implementa validação rigorosa.
-Apenas dados VÁLIDOS são inseridos no banco de dados.
-Dados inválidos são REJEITADOS e registrados em credits.logs_rejeicao.
+MUDANÇAS:
+- Abordagem "Permissive": Não descarta linhas (Bronze é raw).
+- Schema Evolution: Cria colunas automaticamente se não existirem.
+- Validação Suave: Corrige tipos e preenche vazios em vez de rejeitar.
+- Metadata: Adiciona ingest_timestamp, source_filename, etc.
 """
 
 import os
 import sys
 import pandas as pd
+import numpy as np
 import shutil
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 from abc import ABC, abstractmethod
 from psycopg2.extras import execute_values
 from psycopg2 import sql
@@ -27,639 +30,345 @@ from utils.db_connection import get_db_connection, get_cursor
 from utils.logger import setup_logger, log_execution_summary
 from utils.audit import registrar_execucao, finalizar_execucao
 from utils.config import get_paths_config, get_csv_config, get_etl_config
-from utils.validators import validar_campo
-from utils.rejection_logger import RejectionLogger
 
 
 # ============================================================================
 # CONFIGURAÇÃO DE SEGURANÇA
 # ============================================================================
 
-# Whitelist de tabelas permitidas (segurança contra SQL injection)
 TABELAS_PERMITIDAS = {
-    'bronze.contas',
+    'bronze.base_oficial', # Antiga contas
     'bronze.usuarios',
-    'bronze.faturamentos',
-    'bronze.calendario'  # Ex-bronze.data
+    'bronze.faturamento',  # Antiga faturamentos
+    'bronze.data',         # Antiga calendario/data
+    'bronze.faturamentos', # Compatibilidade
+    'bronze.contas',       # Compatibilidade
+    'bronze.calendario'    # Compatibilidade
 }
 
 
-# ============================================================================
-# CLASSE BASE PARA INGESTÃO CSV
-# ============================================================================
-
 class BaseCSVIngestor(ABC):
     """
-    Classe base para ingestores CSV com validação rigorosa (Template Method pattern).
-
-    A camada Bronze agora implementa validação de qualidade ANTES da inserção.
-    Registros inválidos são rejeitados e apenas dados válidos entram no banco.
-
-    Fluxo de execução:
-    1. Validar arquivo CSV existe e é acessível
-    2. Conectar ao banco de dados
-    3. Registrar início da execução (auditoria)
-    4. Ler CSV linha por linha
-    5. Validar cada linha rigorosamente
-    6. Rejeitar linhas inválidas (log estruturado)
-    7. Transformar apenas linhas válidas para formato Bronze
-    8. Inserir dados válidos (TRUNCATE/RELOAD)
-    9. Salvar logs de rejeição no banco
-    10. Arquivar arquivo processado
-    11. Finalizar execução (auditoria)
+    Classe base para ingestão CSV na camada Bronze com Schema Evolution e permissividade.
     """
 
     def __init__(
         self,
         script_name: str,
         tabela_destino: str,
-        arquivo_nome: str,
-        input_subdir: str = ''
+        arquivo_nome: str
     ):
-        """
-        Inicializa o ingestor CSV.
-
-        Args:
-            script_name: Nome do script para logs (ex: 'ingest_faturamento.py')
-            tabela_destino: Tabela Bronze de destino (ex: 'bronze.faturamento')
-            arquivo_nome: Nome do arquivo CSV a ser processado
-            input_subdir: Subdiretório dentro de /app/data/input/ (ex: 'onedrive')
-
-        Raises:
-            ValueError: Se tabela_destino não estiver na whitelist
-        """
-        # Validação de segurança: apenas tabelas permitidas
         if tabela_destino not in TABELAS_PERMITIDAS:
-            raise ValueError(
-                f"Tabela não permitida: {tabela_destino}. "
-                f"Tabelas permitidas: {TABELAS_PERMITIDAS}"
-            )
+            raise ValueError(f"Tabela não permitida: {tabela_destino}")
 
         self.script_name = script_name
         self.tabela_destino = tabela_destino
         self.arquivo_nome = arquivo_nome
 
-        # Carregar configurações centralizadas
         self.paths_config = get_paths_config()
         self.csv_config = get_csv_config()
         self.etl_config = get_etl_config()
 
-        # Configurar caminhos de arquivos
-        self.arquivo_path = self.paths_config.data_input_dir / input_subdir / arquivo_nome
+        self.arquivo_path = self.paths_config.data_input_dir / arquivo_nome
         self.processed_dir = self.paths_config.data_processed_dir
         self.processed_dir.mkdir(parents=True, exist_ok=True)
 
-        # Configurar logger
         self.logger = setup_logger(script_name)
         self.start_time = None
 
-        # Rejection logger será inicializado após conexão com banco
-        self.rejection_logger: Optional[RejectionLogger] = None
-
-    # ========================================================================
-    # MÉTODOS ABSTRATOS (devem ser implementados pelas classes filhas)
-    # ========================================================================
-
     @abstractmethod
     def get_column_mapping(self) -> Dict[str, str]:
-        """
-        Retorna mapeamento de colunas CSV -> Bronze.
-
-        Returns:
-            Dict com mapeamento {coluna_csv: coluna_bronze}
-
-        Example:
-            {'Data': 'data', 'Receita': 'receita', 'Moeda': 'moeda'}
-        """
+        """Mapeamento CSV -> Bronze (Snake Case)"""
         pass
 
     @abstractmethod
-    def get_bronze_columns(self) -> List[str]:
-        """
-        Retorna lista ordenada de colunas da tabela Bronze.
-
-        Returns:
-            Lista com nomes das colunas Bronze na ordem correta
-
-        Example:
-            ['data', 'receita', 'moeda', 'cnpj_cliente', 'email_usuario']
-        """
+    def get_mandatory_fields(self) -> List[str]:
+        """Campos que não podem ser nulos (serão preenchidos com default)"""
         pass
 
-    @abstractmethod
-    def get_validation_rules(self) -> Dict[str, dict]:
+    def get_custom_schema(self) -> Dict[str, str]:
         """
-        Retorna regras de validação para cada campo Bronze.
-
-        Returns:
-            Dict com regras {nome_campo: dict_regras}
-
-        Example:
-            {
-                'data': {'obrigatorio': True, 'tipo': 'data'},
-                'receita': {'obrigatorio': True, 'tipo': 'decimal', 'positivo': True},
-                'email_usuario': {'obrigatorio': True, 'tipo': 'email'}
-            }
+        Retorna tipos SQL customizados para criação da tabela.
+        Ex: {'receita': 'DECIMAL(18,2)', 'obs': 'TEXT'}
+        Se não definido, usa TEXT ou inferência básica.
         """
-        pass
+        return {}
 
     # ========================================================================
-    # MÉTODOS OPCIONAIS (podem ser sobrescritos se necessário)
+    # UTILITÁRIOS DE TEXTO E SCHEMA
     # ========================================================================
 
-    def get_date_columns(self) -> List[str]:
-        """
-        Retorna colunas que contêm datas (auto-detecta por prefixo data_ ou dt_).
+    def normalize_column_name(self, col: str) -> str:
+        """Converte para snake_case e remove caracteres especiais."""
+        import re
+        import unidecode
+        
+        # Remove acentos
+        col = unidecode.unidecode(col)
+        # Converte para minúsculo
+        col = col.lower()
+        # Substitui caracteres não alfanuméricos por underscore
+        col = re.sub(r'[^a-z0-9]+', '_', col)
+        # Remove underscores repetidos e nas pontas
+        col = re.sub(r'_+', '_', col).strip('_')
+        return col
 
-        Returns:
-            Lista de nomes de colunas de data
-        """
-        return [
-            c for c in self.get_bronze_columns()
-            if c.startswith(('data_', 'dt_'))
-        ]
-
-    def transform_custom(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Aplica transformações customizadas antes da validação (opcional).
-
-        Use este método para transformações específicas que não são
-        cobertas pela lógica padrão (ex: cálculos, concatenações, etc).
-
-        Args:
-            df: DataFrame com colunas Bronze
-
-        Returns:
-            DataFrame transformado
-        """
-        return df
+    def detect_sql_type(self, series: pd.Series) -> str:
+        """Infere o tipo SQL Postgres baseado na série Pandas."""
+        if pd.api.types.is_integer_dtype(series):
+            return "BIGINT"
+        elif pd.api.types.is_float_dtype(series):
+            return "DECIMAL(18,2)" # Seguro para moeda
+        elif pd.api.types.is_datetime64_any_dtype(series):
+            return "DATE" # ou TIMESTAMP
+        else:
+            # Verifica se parece data
+            try:
+                # Amostragem para performance
+                sample = series.dropna().head(100)
+                if not sample.empty:
+                    pd.to_datetime(sample)
+                    return "DATE"
+            except:
+                pass
+            return "TEXT"
 
     # ========================================================================
-    # VALIDAÇÃO E LEITURA DE ARQUIVO
+    # VALIDAÇÃO E CORREÇÃO (PERMISSIVA)
     # ========================================================================
 
     def validar_arquivo(self) -> bool:
-        """
-        Valida se arquivo existe e tem permissões adequadas.
-
-        Returns:
-            True se arquivo é válido
-
-        Raises:
-            FileNotFoundError: Se arquivo não existe
-            PermissionError: Se não há permissão de leitura
-        """
         if not self.arquivo_path.exists():
+            # Tenta encontrar arquivo com case insensitive ou similar
+            files = list(self.paths_config.data_input_dir.glob("*"))
+            for f in files:
+                if f.name.lower() == self.arquivo_nome.lower():
+                    self.arquivo_path = f
+                    self.logger.info(f"Arquivo encontrado (match nome): {f.name}")
+                    return True
             raise FileNotFoundError(f"Arquivo não encontrado: {self.arquivo_path}")
-
-        if not os.access(self.arquivo_path, os.R_OK):
-            raise PermissionError(f"Sem permissão de leitura: {self.arquivo_path}")
-
-        size_mb = self.arquivo_path.stat().st_size / (1024 * 1024)
-        self.logger.info(f"Arquivo válido: {self.arquivo_nome} ({size_mb:.2f} MB)")
         return True
 
     def ler_csv(self) -> pd.DataFrame:
-        """
-        Lê arquivo CSV com configurações centralizadas.
-
-        Returns:
-            DataFrame com dados do CSV (todas colunas como string)
-
-        Raises:
-            pd.errors.EmptyDataError: Se arquivo está vazio
-            pd.errors.ParserError: Se há erro ao parsear CSV
-        """
+        self.logger.info(f"Lendo arquivo: {self.arquivo_path.name}")
         try:
-            self.logger.info(f"Lendo arquivo: {self.arquivo_nome}")
-
+            # Ler tudo como string/object primeiro para evitar erros de parse
             df = pd.read_csv(
                 self.arquivo_path,
-                encoding=self.csv_config.encoding,
+                encoding='utf-8', # Forçar utf-8 ou tentar latin1 se falhar
                 sep=self.csv_config.separator,
                 dtype=str,
-                na_values=self.csv_config.na_values,
-                keep_default_na=False
+                on_bad_lines='warn' # Não crashar em linhas ruins
             )
+        except UnicodeDecodeError:
+            self.logger.warning("Falha com UTF-8, tentando Latin-1")
+            df = pd.read_csv(
+                self.arquivo_path,
+                encoding='latin1',
+                sep=self.csv_config.separator,
+                dtype=str,
+                on_bad_lines='warn'
+            )
+        
+        return df
 
-            self.logger.success(f"{len(df):,} linhas lidas do CSV")
-            return df
+    def normalizar_dados(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Aplica mapeamento e normalização de colunas."""
+        
+        # 1. Aplicar mapeamento explícito
+        mapping = self.get_column_mapping()
+        df = df.rename(columns=mapping)
+        
+        # 2. Normalizar colunas restantes que não estavam no mapeamento
+        new_cols = {c: self.normalize_column_name(c) for c in df.columns if c not in mapping.values()}
+        df = df.rename(columns=new_cols)
+        
+        # 3. Adicionar Metadata
+        df['ingest_timestamp'] = datetime.now().isoformat()
+        df['source_filename'] = self.arquivo_nome
+        
+        return df
 
-        except (pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            self.logger.error(f"Erro ao ler CSV: {e}")
-            raise
-
-    def validar_colunas_csv(self, df: pd.DataFrame) -> bool:
+    def corrigir_dados_criticos(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Valida se todas as colunas esperadas estão presentes no CSV.
-
-        Args:
-            df: DataFrame lido do CSV
-
-        Returns:
-            True se todas colunas estão presentes
-
-        Raises:
-            ValueError: Se alguma coluna obrigatória está faltando
+        Verifica campos obrigatórios e loga avisos se estiverem vazios.
+        NÃO preenche automaticamente (mantém NULL/None).
         """
-        esperadas = set(self.get_column_mapping().keys())
-        presentes = set(df.columns)
-        faltando = esperadas - presentes
-
-        if faltando:
-            raise ValueError(f"Colunas faltando no CSV: {faltando}. Esperadas: {esperadas}")
-
-        self.logger.success("Todas colunas esperadas presentes no CSV")
-        return True
-
-    # ========================================================================
-    # VALIDAÇÃO RIGOROSA DE DADOS
-    # ========================================================================
-
-    def validar_e_filtrar_dados(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
-        """
-        Valida cada linha do DataFrame e filtra apenas dados válidos.
-
-        Este é o coração da validação rigorosa da Bronze.
-        Cada linha é validada campo por campo usando as regras definidas.
-        Linhas inválidas são rejeitadas e registradas.
-
-        Args:
-            df: DataFrame com colunas Bronze já mapeadas
-
-        Returns:
-            Tupla (df_valido, num_rejeitados) onde:
-            - df_valido: DataFrame apenas com linhas válidas
-            - num_rejeitados: Número de linhas rejeitadas
-        """
-        self.logger.info("Validando dados rigorosamente...")
-
-        # Limpeza de valores nulos antes da validação
-        df = df.replace({pd.NA: None, pd.NaT: None}).where(pd.notna(df), None)
-
-        regras = self.get_validation_rules()
-        indices_validos = []
-        total_linhas = len(df)
-
-        for idx, row in df.iterrows():
-            # Converter índice DataFrame para número de linha CSV
-            # (+2: +1 para 0-based, +1 para header)
-            numero_linha_csv = idx + 2
-
-            linha_valida = True
-            registro_dict = row.to_dict()
-
-            for campo, regra in regras.items():
-                valor = row.get(campo)
-                valido, mensagem_erro = validar_campo(valor, campo, regra)
-
-                if not valido:
-                    self.rejection_logger.registrar_rejeicao(
-                        numero_linha=numero_linha_csv,
-                        campo_falha=campo,
-                        motivo_rejeicao=mensagem_erro,
-                        valor_recebido=valor,
-                        registro_completo=registro_dict,
-                        severidade='ERROR'
-                    )
-                    linha_valida = False
-                    break
-
-            if linha_valida:
-                indices_validos.append(idx)
-
-        df_valido = df.loc[indices_validos].copy()
-        num_rejeitados = total_linhas - len(df_valido)
-
-        if num_rejeitados > 0:
-            percentual = (num_rejeitados / total_linhas) * 100
-            self.logger.warning(f"{num_rejeitados:,} linhas rejeitadas ({percentual:.1f}%)")
-            self.rejection_logger.imprimir_resumo()
-        else:
-            self.logger.success("Todas as linhas são válidas")
-
-        self.logger.success(f"{len(df_valido):,} linhas válidas prontas para Bronze")
-
-        return df_valido, num_rejeitados
-
-    # ========================================================================
-    # TRANSFORMAÇÃO PARA BRONZE
-    # ========================================================================
-
-    def transformar_para_bronze(self, df: pd.DataFrame) -> Tuple[List, List[str]]:
-        """
-        Transforma DataFrame validado para formato Bronze.
-
-        Args:
-            df: DataFrame com dados já validados
-
-        Returns:
-            Tupla (registros, colunas) onde:
-            - registros: Lista de listas com valores
-            - colunas: Lista com nomes das colunas
-        """
-        self.logger.info("Transformando para formato Bronze...")
-
-        df_bronze = df.rename(columns=self.get_column_mapping())
-
-        colunas_bronze = self.get_bronze_columns()
-        for col in colunas_bronze:
-            if col not in df_bronze.columns:
-                df_bronze[col] = None
-                self.logger.debug(f"Coluna '{col}' preenchida com NULL")
-
-        df_bronze = self._formatar_datas(df_bronze)
-        df_bronze = self.transform_custom(df_bronze)
-        df_bronze = df_bronze.dropna(how='all')
-        df_bronze = df_bronze.replace({pd.NA: None, pd.NaT: None})
-        df_bronze = df_bronze.where(pd.notna(df_bronze), None)
-
-        registros = df_bronze[colunas_bronze].values.tolist()
-
-        self.logger.success(f"{len(registros):,} registros prontos para inserção")
-        return registros, colunas_bronze
-
-    def _formatar_datas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Formata colunas de data para padrão Bronze (YYYY-MM-DD).
-
-        Args:
-            df: DataFrame com colunas Bronze
-
-        Returns:
-            DataFrame com datas formatadas
-        """
-        colunas_data = self.get_date_columns()
-
-        if not colunas_data:
-            return df
-
-        self.logger.info("Formatando colunas de data...")
-
-        for col in colunas_data:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
-                df[col] = df[col].where(df[col].notna(), None)
-                df[col] = df[col].apply(
-                    lambda x: x.strftime(self.csv_config.date_format) if pd.notna(x) else None
-                )
-                self.logger.debug(f"Coluna '{col}' formatada como data")
+        mandatory = self.get_mandatory_fields()
+        
+        for col in mandatory:
+            if col not in df.columns:
+                self.logger.error(f"❌ Coluna obrigatória '{col}' não existe no arquivo!")
+                continue
+            
+            # Identificar linhas com problema
+            # (Pandas isna() pega None e NaN)
+            bad_rows = df[df[col].isna() | (df[col] == '')].index
+            
+            total_bad = len(bad_rows)
+            
+            if total_bad > 0:
+                self.logger.warning(f"⚠️  Campo '{col}' tem {total_bad} valores vazios.")
+                # Logar amostra das primeiras 5 linhas ruins
+                for i in bad_rows[:5]:
+                    # +2 para aproximar do numero da linha do CSV (header + 0-index)
+                    self.logger.warning(f"   -> Linha {i+2}: Valor ausente para '{col}'")
+                
+                if total_bad > 5:
+                    self.logger.warning(f"   -> ... e mais {total_bad - 5} linhas.")
 
         return df
 
+    def transform_custom(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Hook para transformações customizadas nas subclasses"""
+        return df
+
     # ========================================================================
-    # INSERÇÃO NO BANCO DE DADOS
+    # SCHEMA SYNC (NO EVOLUTION - STRICT)
     # ========================================================================
 
-    def inserir_bronze(self, conn, registros: List, colunas: List[str]) -> int:
+    def sync_schema(self, conn, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Insere dados na Bronze usando estratégia TRUNCATE/RELOAD.
-
-        IMPORTANTE: Bronze usa TRUNCATE/RELOAD, não incremental.
-        Todos os dados existentes são removidos antes da inserção.
-
-        Args:
-            conn: Conexão com o banco de dados
-            registros: Lista de listas com valores a inserir
-            colunas: Lista com nomes das colunas
-
+        Verifica schema no banco.
+        - Se não existe: Cria.
+        - Se existe: Filtra DF para manter apenas colunas que existem no banco.
+        
         Returns:
-            Número de linhas inseridas
+            DataFrame filtrado (apenas colunas validas)
         """
-        if not registros:
-            self.logger.warning("Nenhum registro válido para inserir")
-            return 0
-
-        self.logger.info(f"Inserindo {len(registros):,} registros na Bronze...")
-
+        schema, table = self.tabela_destino.split('.')
+        
         with get_cursor(conn) as cur:
-            schema, tabela = self.tabela_destino.split('.')
+            # Verificar se tabela existe
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = %s AND table_name = %s
+                );
+            """, (schema, table))
+            exists = cur.fetchone()[0]
+            
+            if not exists:
+                self.logger.info(f"Tabela {self.tabela_destino} não existe. Criando...")
+                self._create_table(cur, schema, table, df)
+                return df
+            else:
+                # Obter colunas existentes no banco
+                cur.execute("""
+                    SELECT column_name FROM information_schema.columns 
+                    WHERE table_schema = %s AND table_name = %s;
+                """, (schema, table))
+                db_cols = {row[0] for row in cur.fetchall()}
+                
+                # Identificar colunas no DF que não estão no banco
+                extra_cols = [c for c in df.columns if c not in db_cols]
+                if extra_cols:
+                    self.logger.warning(f"Ignorando {len(extra_cols)} colunas que não existem no banco: {extra_cols[:5]}...")
+                    df = df.drop(columns=extra_cols)
+                
+                # Garantir ordem (opcional, mas bom)
+                common_cols = [c for c in df.columns if c in db_cols]
+                return df[common_cols]
 
-            # TRUNCATE: remover dados existentes
-            truncate_query = sql.SQL("TRUNCATE TABLE {}.{} CASCADE").format(
-                sql.Identifier(schema),
-                sql.Identifier(tabela)
-            )
-            self.logger.info(f"Truncando tabela {self.tabela_destino}")
-            cur.execute(truncate_query)
-
-            # INSERT: inserir novos dados em lote
-            colunas_sql = sql.SQL(', ').join(map(sql.Identifier, colunas))
-            insert_query = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
-                sql.Identifier(schema),
-                sql.Identifier(tabela),
-                colunas_sql
-            )
-
-            batch_size = self.etl_config.batch_insert_size
-            total_inserido = 0
-
-            for i in range(0, len(registros), batch_size):
-                batch = registros[i:i + batch_size]
-                execute_values(cur, insert_query, batch, page_size=batch_size)
-                total_inserido += len(batch)
-
-                if i + batch_size < len(registros):
-                    self.logger.info(f"Progresso: {total_inserido:,} / {len(registros):,}")
-
-        self.logger.success(f"{total_inserido:,} registros inseridos na Bronze")
-        return total_inserido
+    def _create_table(self, cur, schema, table, df):
+        """Cria tabela baseada nas colunas do DataFrame."""
+        cols_def = []
+        custom_types = self.get_custom_schema()
+        
+        for col in df.columns:
+            if col in custom_types:
+                ctype = custom_types[col]
+            else:
+                ctype = "TEXT" # Default safe para Bronze
+            
+            cols_def.append(sql.SQL("{} {}").format(
+                sql.Identifier(col),
+                sql.SQL(ctype)
+            ))
+        
+        query = sql.SQL("CREATE TABLE {}.{} ({})").format(
+            sql.Identifier(schema),
+            sql.Identifier(table),
+            sql.SQL(", ").join(cols_def)
+        )
+        cur.execute(query)
 
     # ========================================================================
-    # ARQUIVAMENTO DE ARQUIVO PROCESSADO
-    # ========================================================================
-
-    def mover_para_processed(self) -> None:
-        """
-        Move arquivo processado para diretório de arquivamento com timestamp.
-
-        Arquivos processados são movidos para data/processed/ com prefixo de data/hora
-        para manter histórico de processamentos.
-        """
-        try:
-            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            arquivo_destino = self.processed_dir / f"{timestamp}_{self.arquivo_nome}"
-            shutil.move(str(self.arquivo_path), str(arquivo_destino))
-            self.logger.success(f"Arquivo arquivado: {arquivo_destino.name}")
-
-        except Exception as e:
-            self.logger.warning(f"Não foi possível arquivar arquivo: {e}")
-
-    # ========================================================================
-    # PIPELINE DE EXECUÇÃO PRINCIPAL
+    # EXECUÇÃO
     # ========================================================================
 
     def executar(self) -> int:
-        """
-        Executa pipeline completo de ingestão CSV -> Bronze.
-
-        Fluxo de execução:
-        1. Validar arquivo
-        2. Conectar ao banco
-        3. Registrar início da execução (auditoria)
-        4. Ler CSV
-        5. Validar estrutura (colunas)
-        6. Validar dados rigorosamente (linha por linha)
-        7. Transformar dados válidos para formato Bronze
-        8. Inserir na Bronze (TRUNCATE/RELOAD)
-        9. Salvar logs de rejeição
-        10. Commit transação
-        11. Arquivar arquivo processado
-        12. Finalizar execução (auditoria)
-
-        Returns:
-            0 se sucesso, 1 se erro
-        """
         conn = None
-        execucao_id = None
-        self.start_time = time.time()
-
+        execucao_fk = None
         try:
-            # ================================================================
-            # FASE 1: PREPARAÇÃO
-            # ================================================================
-            self.logger.info("=" * 80)
-            self.logger.info(f"INICIANDO: {self.script_name}")
-            self.logger.info(f"DESTINO: {self.tabela_destino}")
-            self.logger.info(f"ARQUIVO: {self.arquivo_nome}")
-            self.logger.info("=" * 80)
-
-            # Validar arquivo existe e é acessível
             self.validar_arquivo()
-
+            
             conn = get_db_connection()
-            self.logger.success("Conectado ao banco de dados")
+            execucao_fk = registrar_execucao(conn, self.script_name, 'bronze', None, self.tabela_destino)
+            
+            # 1. Ler
+            df = self.ler_csv()
+            
+            # 2. Normalizar (Rename, Snake Case, Metadata)
+            df = self.normalizar_dados(df)
+            
+            # 3. Transformações Customizadas (Antes de validar obrigatórios)
+            df = self.transform_custom(df)
+            
+            # 4. Validar/Corrigir (Mandatory fields)
+            df = self.corrigir_dados_criticos(df)
+            
+            # 5. Sync Schema (Strict - Drop extra cols)
+            df = self.sync_schema(conn, df)
+            
+            if df.empty:
+                self.logger.warning("DataFrame vazio após filtragem de colunas.")
+                return 0
 
-            execucao_fk = registrar_execucao(
-                conn=conn,
-                script_nome=self.script_name,
-                camada='bronze',
-                tabela_origem=None,
-                tabela_destino=self.tabela_destino
-            )
-            self.logger.info(f"Execução registrada com ID: {execucao_fk}")
-
-            # Inicializar rejection logger
-            self.rejection_logger = RejectionLogger(
-                conn=conn,
-                execucao_fk=execucao_fk,
-                script_nome=self.script_name,
-                tabela_destino=self.tabela_destino
-            )
-
-            # ================================================================
-            # FASE 2: LEITURA, DEDUPLICAÇÃO E VALIDAÇÃO
-            # ================================================================
-            # Ler CSV
-            df_raw = self.ler_csv()
-
-            # Etapa de Deduplicação de registros exatos
-            if not df_raw.empty:
-                linhas_antes = len(df_raw)
-                df_raw.drop_duplicates(inplace=True)
-                linhas_depois = len(df_raw)
-                if linhas_antes > linhas_depois:
-                    self.logger.info(f"Deduplicação: {linhas_antes - linhas_depois} linhas duplicadas exatas foram removidas.")
-
-            # Validar estrutura (colunas presentes)
-            self.validar_colunas_csv(df_raw)
-
-            # Renomear colunas para Bronze (preparar para validação)
-            df_bronze = df_raw.rename(columns=self.get_column_mapping())
-
-            # Validar dados rigorosamente (linha por linha)
-            df_valido, num_rejeitados = self.validar_e_filtrar_dados(df_bronze)
-
-            # Se não há dados válidos, falhar execução
-            if len(df_valido) == 0:
-                raise ValueError(
-                    "Nenhum registro válido encontrado. "
-                    "Todos os registros foram rejeitados. "
-                    "Verifique os logs de rejeição."
+            # 6. Inserir (Truncate + Insert)
+            registros = df.where(pd.notna(df), None).values.tolist()
+            cols = list(df.columns)
+            
+            with get_cursor(conn) as cur:
+                schema, table = self.tabela_destino.split('.')
+                
+                # Truncate
+                cur.execute(sql.SQL("TRUNCATE TABLE {}.{}").format(
+                    sql.Identifier(schema), sql.Identifier(table)
+                ))
+                
+                # Batch Insert
+                insert_query = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
+                    sql.Identifier(schema),
+                    sql.Identifier(table),
+                    sql.SQL(', ').join(map(sql.Identifier, cols))
                 )
-
-            # ================================================================
-            # FASE 3: TRANSFORMAÇÃO E INSERÇÃO
-            # ================================================================
-            # Transformar para formato Bronze final
-            registros, colunas = self.transformar_para_bronze(df_valido)
-
-            # Inserir na Bronze
-            linhas_inseridas = self.inserir_bronze(conn, registros, colunas)
-
-            # Salvar logs de rejeição no banco
-            if num_rejeitados > 0:
-                self.rejection_logger.salvar_rejeicoes()
-
+                
+                execute_values(cur, insert_query, registros, page_size=1000)
+            
             conn.commit()
-            self.logger.success("Transação confirmada (COMMIT)")
-
-            # ================================================================
-            # FASE 4: FINALIZAÇÃO
-            # ================================================================
-            # Arquivar arquivo processado
-            self.mover_para_processed()
-
-            # Calcular métricas
-            duracao = time.time() - self.start_time
-            total_processado = len(df_raw)
-
-            # Finalizar execução (auditoria)
-            finalizar_execucao(
-                conn=conn,
-                execucao_id=execucao_fk,
-                status='sucesso',
-                linhas_processadas=total_processado,
-                linhas_inseridas=linhas_inseridas,
-                linhas_erro=num_rejeitados
-            )
-            conn.commit()  # Persistir atualização de auditoria
-
-            # Log de resumo
-            log_execution_summary(
-                script_name=self.script_name,
-                status='sucesso',
-                linhas_processadas=total_processado,
-                linhas_inseridas=linhas_inseridas,
-                duracao_segundos=duracao
-            )
-
-            return 0  # Sucesso
+            
+            # Audit
+            finalizar_execucao(conn, execucao_fk, 'sucesso', len(df), len(df), 0)
+            self.logger.success(f"Sucesso: {len(df)} linhas em {self.tabela_destino}")
+            
+            # Move processed
+            if self.arquivo_path.exists():
+                ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                try:
+                    shutil.move(str(self.arquivo_path), str(self.processed_dir / f"{ts}_{self.arquivo_nome}"))
+                    self.logger.info(f"Arquivo movido para processed: {ts}_{self.arquivo_nome}")
+                except Exception as move_err:
+                    self.logger.warning(f"Erro ao mover arquivo: {move_err}")
+            
+            return 0
 
         except Exception as e:
-            # ================================================================
-            # TRATAMENTO DE ERRO
-            # ================================================================
-            self.logger.error(f"ERRO: {e}", exc_info=True)
-
-            duracao = time.time() - self.start_time if self.start_time else 0
-
+            self.logger.error(f"Erro fatal: {e}", exc_info=True)
             if conn:
                 conn.rollback()
-                self.logger.warning("Transação revertida (ROLLBACK)")
-
                 if execucao_fk:
-                    finalizar_execucao(
-                        conn=conn,
-                        execucao_id=execucao_fk,
-                        status='erro',
-                        mensagem_erro=str(e)
-                    )
-                    conn.commit()  # Persistir atualização de auditoria
-
-            # Log de resumo de erro
-            log_execution_summary(
-                script_name=self.script_name,
-                status='erro',
-                duracao_segundos=duracao
-            )
-
+                    finalizar_execucao(conn, execucao_fk, 'erro', mensagem_erro=str(e))
             return 1
-
         finally:
-            # ================================================================
-            # LIMPEZA
-            # ================================================================
-            if conn:
-                conn.close()
-                self.logger.info("Conexão com banco encerrada")
+            if conn: conn.close()

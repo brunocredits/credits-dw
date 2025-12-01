@@ -2,21 +2,24 @@
 from datetime import datetime
 from typing import Optional, List, Dict
 from contextlib import contextmanager
+from uuid import uuid4
 from utils.db_connection import get_cursor
 
 def registrar_execucao(conn, script_nome: str, camada: str,
                        tabela_origem: Optional[str] = None,
                        tabela_destino: Optional[str] = None) -> str:
     """Registra início de execução ETL. Retorna UUID como string"""
+    exec_id = str(uuid4())
     query = """
         INSERT INTO auditoria.historico_execucao
-        (script_nome, camada, tabela_origem, tabela_destino, data_inicio, status)
-        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+        (id, script_nome, camada, tabela_origem, tabela_destino, data_inicio, status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
     """
     with get_cursor(conn) as cur:
-        cur.execute(query, (script_nome, camada, tabela_origem, tabela_destino,
+        cur.execute(query, (exec_id, script_nome, camada, tabela_origem, tabela_destino,
                            datetime.now(), 'em_execucao'))
-        return str(cur.fetchone()[0])
+        conn.commit()
+        return exec_id
 
 def finalizar_execucao(conn, execucao_id: str, status: str,
                        linhas_processadas: int = 0, linhas_inseridas: int = 0,
@@ -34,6 +37,7 @@ def finalizar_execucao(conn, execucao_id: str, status: str,
         cur.execute(query, (datetime.now(), status, linhas_processadas,
                            linhas_inseridas, linhas_atualizadas, linhas_erro,
                            mensagem_erro, execucao_id))
+        conn.commit()
 
 def obter_ultima_execucao(conn, script_nome: str) -> Optional[Dict]:
     """Obtém última execução de um script"""

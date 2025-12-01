@@ -1,363 +1,102 @@
-# Credits Brasil - Data Warehouse (v4.2)
+# 🏭 Credits Data Warehouse - Camada Bronze (ETL)
 
-Pipeline ETL moderno para consolidação de dados financeiros, implementando uma arquitetura Medallion completa (Bronze/Silver/Gold) com um modelo dimensional Star Schema e um sistema rigoroso de validação de dados na camada de entrada.
-
-**Versão:** 4.2 (Novembro de 2025 - Pipeline 100% Docker + Gold Layer)
-
-## 📋 Sumário
-
-1.  [Visão Geral e Arquitetura](#-visão-geral-e-arquitetura)
-2.  [Principais Melhorias (v4.0)](#-principais-melhorias-v40)
-3.  [Tecnologias](#-tecnologias)
-4.  [Configuração e Instalação](#-configuração-e-instalação)
-5.  [Executando o Pipeline](#-executando-o-pipeline)
-6.  [Validação de Dados e Logs](#-validação-de-dados-e-logs)
-7.  [Estrutura do Projeto](#-estrutura-do-projeto)
-8.  [Desenvolvimento e Contribuição](#-desenvolvimento-e-contribuição)
+Bem-vindo ao repositório de ETL da **Credits Brasil**. Este projeto gerencia a ingestão, padronização e carga de dados brutos (CSV/Excel) para o Data Warehouse na camada Bronze.
 
 ---
 
-## 🏛️ Visão Geral e Arquitetura
+## 🚀 Visão Geral
 
-Este projeto implementa um Data Warehouse para centralizar dados de clientes, usuários e faturamento da Credits Brasil. O objetivo é fornecer uma fonte de dados confiável, consolidada e otimizada para análises estratégicas e Business Intelligence.
+O sistema roda inteiramente em **Docker**, garantindo isolamento e reprodutibilidade.
+Ele é responsável por:
+1.  **Ler** arquivos da pasta `docker/data/input/`.
+2.  **Padronizar** automaticamente os nomes de colunas e formatos.
+3.  **Filtrar** estritamente os campos permitidos pelo schema.
+4.  **Ingerir** os dados no banco PostgreSQL (`bronze`).
+5.  **Auditar** todo o processo (`auditoria`).
 
-A arquitetura segue o padrão **Medallion**, com um fluxo de dados claro entre as camadas:
+---
 
-```mermaid
-graph TD
-    A[Arquivos CSV] --> B{Camada Bronze};
-    B --> C{Camada Silver};
-    C --> D{Camada Gold};
-    D --> E[Análises e BI];
+## 📁 Estrutura de Pastas
 
-    subgraph Camada Bronze
-        direction LR
-        B_IN[Validação Rigorosa] --> B_OUT[Tabelas Raw];
-    end
+-   `docker/data/input/`: **Coloque seus arquivos aqui** (CSV ou Excel).
+-   `docker/data/processed/`: Arquivos processados são movidos para cá automaticamente.
+-   `docker/data/templates/`: Modelos CSV de exemplo para preenchimento correto.
+-   `docker/logs/`: Logs detalhados de execução.
+-   `python/`: Código fonte dos ingestores e utilitários.
 
-    subgraph Camada Silver
-        direction LR
-        C_IN[Transformações] --> C_OUT[Star Schema];
-    end
+---
 
-    subgraph Camada Gold
-        direction LR
-        D_IN[Views SQL] --> D_OUT[Métricas de Negócio];
-    end
+## 📋 Como Usar
 
-    style B fill:#CD7F32,stroke:#333,stroke-width:2px
-    style C fill:#C0C0C0,stroke:#333,stroke-width:2px
-    style D fill:#FFD700,stroke:#333,stroke-width:2px
+### 1. Preparar Arquivos
+Consulte a pasta `docker/data/templates/` para ver o formato esperado.
+Os arquivos esperados são:
+*   `faturamentos.csv` (ou Excel contendo "Faturamento")
+*   `base_oficial.csv` (ou Excel contendo "Base")
+*   `usuarios.csv` (ou Excel contendo "Usuarios")
+
+**Nota:** O sistema é inteligente. Ele detecta a aba correta no Excel e renomeia colunas comuns (ex: "Valor da Conta" -> "valor_conta").
+
+### 2. Colocar na Pasta de Entrada
+Mova seus arquivos para:
+```bash
+~/credits-dw/docker/data/input/
 ```
 
-### Camadas de Dados
-
-#### 🥉 Camada Bronze (`schema: bronze`)
-
--   **Propósito:** Armazenar os dados brutos exatamente como vêm da origem, mas **apenas após passarem por uma validação rigorosa**.
--   **Estratégia:** `TRUNCATE/RELOAD`. A cada execução, a tabela é limpa e recarregada com os dados da nova carga.
--   **Validação (v4.0):** Este é o principal diferencial. Nenhum dado inválido entra na camada Bronze. Registros que falham nas regras de validação (formato, tipo, obrigatoriedade, domínio) são **rejeitados** e registrados na tabela `credits.logs_rejeicao` para análise, garantindo 100% de qualidade na entrada.
-
-#### 🥈 Camada Silver (`schema: silver`)
-
--   **Propósito:** Modelar os dados para análise, aplicando regras de negócio, limpando, enriquecendo e criando um modelo dimensional.
--   **Estratégia:** Cargas incrementais e **SCD Type 2 (Slowly Changing Dimensions)** para dimensões que precisam de histórico de mudanças (ex: `dim_clientes`, `dim_usuarios`).
--   **Modelo:** **Star Schema**, composto por tabelas Fato (métricas de negócio) e Dimensões (contexto descritivo), otimizado para consultas analíticas.
-
-#### 🥇 Camada Gold (`schema: gold`)
-
--   **Propósito:** Disponibilizar métricas de negócio agregadas e KPIs prontos para consumo por ferramentas de BI e dashboards.
--   **Estratégia:** **SQL Views** que referenciam a camada Silver. Não há ETL - as views são **auto-atualizadas** quando Silver é carregada.
--   **Vantagens:** Zero latência de atualização, sem processamento adicional, queries otimizadas para análise.
--   **Views disponíveis:**
-    -   `vendas_diarias` - Vendas por dia e consultor
-    -   `vendas_mensais` - Agregação mensal de receitas
-    -   `carteira_clientes` - Status consolidado da carteira
-    -   `performance_consultores` - KPIs por consultor (clientes, transações, receita)
-
----
-
-## 🎯 Características Principais
-
--   **100% Docker:** Pipeline completo roda dentro do container, sem scripts locais
--   **Validação Rigorosa:** Sistema de validação na Bronze rejeita dados inválidos antes da inserção
--   **Logs de Rejeição:** Auditoria completa de registros rejeitados com motivo detalhado
--   **CNPJ/CPF Padronizados:** Geração automática de campos limpos e formatados
--   **Star Schema:** Modelo dimensional (4 dimensões + 1 fato) otimizado para BI
--   **SCD Type 2:** Versionamento automático para rastreamento de mudanças históricas
--   **Integridade Referencial:** FK constraints garantem consistência entre fatos e dimensões
--   **Gold Layer Auto-Atualizada:** Views SQL que atualizam instantaneamente quando Silver muda
-
----
-
-## 🛠️ Tecnologias
-
-| Componente        | Tecnologia        |
-| ----------------- | ----------------- |
-| **Linguagem**     | Python 3.10+      |
-| **Banco de Dados**| PostgreSQL 15     |
-| **Containerização**| Docker & Compose  |
-| **Processamento** | Pandas, NumPy     |
-| **Conexão DB**    | psycopg2-binary   |
-| **Logs**          | Loguru            |
-| **Qualidade**     | Black, Ruff, Mypy |
-| **Testes**        | Pytest, Pytest-Cov|
-
----
-
-## ⚙️ Configuração e Instalação
-
-### Pré-requisitos
-
--   Docker e Docker Compose instalados.
--   Git para clonar o repositório.
--   Acesso à internet para baixar a imagem Docker e dependências.
-
-### 1. Clonar o Repositório
+### 3. Executar a Carga
+Execute o comando abaixo para rodar todo o pipeline (Padronização + Ingestão):
 
 ```bash
-git clone https://github.com/brunocredits/credits-dw.git
-cd credits-dw
-```
+# Entra na pasta do projeto
+cd ~/credits-dw
 
-### 2. Configurar Variáveis de Ambiente
+# 1. Padronizar arquivos (Gera CSVs limpos em data/ready e move para input)
+docker-compose -f docker/docker-compose.yml exec etl-processor python python/standardize_files.py
+docker-compose -f docker/docker-compose.yml exec etl-processor bash -c "mv /app/data/ready/*.csv /app/data/input/"
 
-Crie o arquivo `.env` na raiz do projeto a partir do template. Este arquivo **não é versionado** por segurança.
-
-```bash
-cp .env.example .env
-```
-
-Edite o arquivo `.env` com as credenciais do seu banco de dados:
-
-```properties
-DB_HOST=seu_host_banco
-DB_PORT=5432
-DB_NAME=seu_db
-DB_USER=seu_usuario
-DB_PASSWORD=sua_senha
-LOG_LEVEL=INFO
-```
-
-### 3. Preparar Arquivos CSV de Entrada
-
-Coloque os arquivos CSV que serão processados no diretório `docker/data/input/onedrive/`. A estrutura esperada é:
-
-```
-docker/data/input/onedrive/
-├── contas_base_oficial.csv
-├── usuarios.csv
-└── faturamento.csv
+# 2. Ingerir no Banco
+docker-compose -f docker/docker-compose.yml exec etl-processor python python/run_bronze_ingestors.py
 ```
 
 ---
 
-## 🚀 Executando o Pipeline
+## 📊 Schemas e Campos
 
-Todo o ambiente é orquestrado pelo Docker. Os comandos devem ser executados a partir do diretório raiz do projeto.
+O sistema utiliza um **Schema Estrito**. Campos fora desta lista serão **descartados**. Campos obrigatórios vazios gerarão **avisos** nos logs, mas o registro será carregado (como NULL).
 
-### 1. Iniciar o Ambiente Docker
+### 🟦 Faturamento (`bronze.faturamento`)
+*   **Dados:** status, numero_documento, parcela, nota_fiscal, cliente_nome_fantasia
+*   **Financeiro:** valor_conta, valor_liquido, impostos_retidos, desconto, juros_multa, valor_recebido, valor_a_receber
+*   **Datas:** previsao_recebimento, ultimo_recebimento, vencimento, data_emissao, data_fat
+*   **Outros:** categoria, operacao, vendedor, projeto, conta_corrente, numero_boleto, tipo_documento, cliente_razao_social, tags_cliente, observacao, empresa, ms
 
-Este comando irá construir a imagem Docker, baixar as dependências e iniciar o container do serviço de ETL em background.
+### 🟦 Base Oficial (`bronze.base_oficial`)
+*   **Principal:** cnpj, status, nome_fantasia
+*   **Gestão:** lider, responsavel, empresa, grupo, canal1, canal2
+*   **Controle:** manter_no_baseline, obs
+*   **Fórmulas:** faixas, mediana
 
-```bash
-docker compose -f docker/docker-compose.yml up -d --build
-```
-
-Para verificar se o container está em execução:
-
-```bash
-docker compose -f docker/docker-compose.yml ps
-# Deve exibir o serviço etl-processor com status "running"
-```
-
-### 2. Executar a Ingestão (Camada Bronze)
-
-Este script executa todos os ingestores de CSV configurados, realizando o processo de validação, rejeição e carga na camada Bronze.
-
-```bash
-docker compose -f docker/docker-compose.yml exec etl-processor python python/run_all_ingestors.py
-```
-
-**Para executar um ingestor específico:**
-
-```bash
-# Exemplo para o faturamento
-docker compose -f docker/docker-compose.yml exec etl-processor python python/ingestors/csv/ingest_faturamento.py
-```
-
-### 3. Executar as Transformações (Camada Silver)
-
-Após a carga da Bronze, este script executa as transformações para popular as dimensões e fatos da camada Silver.
-
-```bash
-docker compose -f docker/docker-compose.yml exec etl-processor python python/run_silver_transformations.py
-```
-
-**Nota:** A camada Gold (views) se auto-atualiza automaticamente quando Silver é carregada. Não é necessário executar nenhum processo adicional.
-
-### 4. Consultar Métricas (Camada Gold)
-
-Após a carga da Silver, as views Gold já estarão disponíveis:
-
-```bash
-# Conectar ao banco
-docker compose -f docker/docker-compose.yml exec etl-processor psql -h $DB_HOST -U $DB_USER -d $DB_NAME
-
-# Exemplos de queries
-SELECT * FROM gold.vendas_diarias ORDER BY data_completa DESC LIMIT 10;
-SELECT * FROM gold.performance_consultores WHERE total_transacoes > 0;
-SELECT * FROM gold.vendas_mensais ORDER BY ano DESC, mes DESC;
-```
-
-### 5. Parar o Ambiente
-
-Para desligar os containers, utilize:
-
-```bash
-docker compose -f docker/docker-compose.yml down
-```
+### 🟦 Usuários (`bronze.usuarios`)
+*   **Perfil:** nome_usuario, cargo, status, nivel, time, email_usuario
+*   **Metas:** meta_mensal, meta_fidelidade, meta_anual
+*   **Acessos (Boolean):** acesso_vendedor, acesso_gerente, acesso_indireto, acesso_diretoria, acesso_temporario
+*   **Hierarquia (Emails):** email_superior, email_gerencia, email_diretoria
 
 ---
 
-## 📊 Validação de Dados e Logs
+## 🛠️ Comandos Úteis
 
-### Logs de Execução
-
--   Cada script gera um arquivo de log em `/app/logs/` dentro do container (mapeado para a pasta `logs/` no host).
--   Você pode acompanhar um log em tempo real:
-    ```bash
-    # Exemplo para o ingestor de faturamento
-    docker compose -f docker/docker-compose.yml exec etl-processor tail -f /app/logs/ingest_faturamento.py.log
-    ```
-
-### Logs de Rejeição (A Jóia da Coroa da v4.0)
-
--   Quando um registro de um CSV falha na validação, ele é **rejeitado** e um log detalhado é inserido na tabela `credits.logs_rejeicao`.
--   Isso permite uma análise precisa dos problemas de qualidade na origem.
-
-**Para consultar os registros rejeitados:**
-
-```sql
--- Resumo de rejeições do último dia por motivo
-SELECT
-    script_nome,
-    campo_falha,
-    motivo_rejeicao,
-    COUNT(1) as total_rejeicoes
-FROM credits.logs_rejeicao
-WHERE data_rejeicao >= NOW() - INTERVAL '1 day'
-GROUP BY 1, 2, 3
-ORDER BY total_rejeicoes DESC;
-
--- Detalhes de um registro rejeitado
-SELECT
-    numero_linha,
-    valor_recebido,
-    registro_completo::jsonb
-FROM credits.logs_rejeicao
-WHERE id = <id_da_rejeicao>;
-```
-
----
-
-## 🏗️ Estrutura do Projeto
-
-```
-credits-dw/
-│
-├── docker/
-│   ├── Dockerfile              # Define a imagem Python do ETL
-│   ├── docker-compose.yml      # Orquestra os serviços Docker
-│   └── data/                   # Volume de dados (input, processed)
-│
-├── python/
-│   ├── ingestors/              # Scripts de ingestão (Camada Bronze)
-│   │   └── csv/
-│   │       ├── base_csv_ingestor.py  # Classe base com Template Method
-│   │       └── ingest_*.py           # Ingestores específicos
-│   │
-│   ├── transformers/           # Scripts de transformação (Camada Silver)
-│   │   └── silver/
-│   │       ├── transform_*.py      # Transformadores para dims e fatos
-│   │
-│   ├── utils/                    # Módulos de utilidade
-│   │   ├── audit.py              # Logs de auditoria de execução
-│   │   ├── config.py             # Carregamento de configurações
-│   │   ├── db_connection.py      # Gerenciamento de conexão com o DB
-│   │   ├── logger.py             # Configuração do Loguru
-│   │   ├── rejection_logger.py   # Sistema de log de rejeições (NOVO)
-│   │   └── validators.py         # Funções de validação de dados (NOVO)
-│   │
-│   ├── run_all_ingestors.py      # Orquestrador da camada Bronze
-│   └── run_silver_transformations.py # Orquestrador da camada Silver
-│
-├── logs/                       # Arquivos de log gerados pelas execuções
-├── tests/                      # Testes unitários e de integração
-├── .env.example                # Arquivo de exemplo para variáveis de ambiente
-├── requirements.txt            # Dependências Python
-└── README.md                   # Este arquivo
-```
-
----
-
-## 🧑‍💻 Desenvolvimento e Contribuição
-
-### Adicionando um Novo Ingestor (Bronze)
-
-1.  Crie o arquivo em `python/ingestors/csv/ingest_novo_arquivo.py`.
-2.  Crie uma classe que herde de `BaseCSVIngestor`.
-3.  Implemente os 3 métodos obrigatórios:
-    -   `get_column_mapping()`: Mapeia colunas do CSV para a tabela.
-    -   `get_bronze_columns()`: Lista as colunas da tabela Bronze.
-    -   `get_validation_rules()`: Define as regras de validação para cada campo.
-4.  Adicione o novo ingestor ao `run_all_ingestors.py`.
-
-**Exemplo de `get_validation_rules()`:**
-
-```python
-def get_validation_rules(self) -> Dict[str, dict]:
-    return {
-        'email': {
-            'obrigatorio': True,
-            'tipo': 'email'
-        },
-        'receita': {
-            'obrigatorio': True,
-            'tipo': 'decimal',
-            'positivo': True # Deve ser um número > 0
-        },
-        'moeda': {
-            'obrigatorio': True,
-            'tipo': 'string',
-            'dominio': ['BRL', 'USD', 'EUR'] # Apenas valores permitidos
-        }
-    }
-```
-
-### Ferramentas de Qualidade de Código
-
-Antes de commitar, rode as ferramentas de qualidade:
-
+**Verificar Logs em Tempo Real:**
 ```bash
-# Formatação de código
-black python/ tests/
-
-# Análise de estilo e erros (Linter)
-ruff check .
-
-# Verificação de tipos estáticos
-mypy python/
+docker-compose -f docker/docker-compose.yml logs -f
 ```
 
-### Executando Testes
-
-Para garantir que nenhuma funcionalidade foi quebrada:
-
+**Verificar Status da Auditoria:**
 ```bash
-# Executar todos os testes
-pytest
+docker-compose -f docker/docker-compose.yml exec etl-processor python python/check_audit.py
+```
 
-# Executar com relatório de cobertura de código
-pytest --cov=python
+**Reiniciar Serviços:**
+```bash
+docker-compose -f docker/docker-compose.yml restart
 ```

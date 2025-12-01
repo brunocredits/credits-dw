@@ -151,7 +151,6 @@ All CSV ingestors inherit from `BaseCSVIngestor` in `python/ingestors/csv/base_c
    - `script_name`: Script filename for audit logs
    - `tabela_destino`: Full table name (e.g., `'bronze.faturamentos'`)
    - `arquivo_nome`: CSV filename to process
-   - `input_subdir`: Subdirectory under `/app/data/input/` (usually `'onedrive'`)
 
 **Example ingestor structure** (`python/ingestors/csv/ingest_faturamentos.py`):
 ```python
@@ -160,8 +159,7 @@ class IngestFaturamentos(BaseCSVIngestor):
         super().__init__(
             script_name='ingest_faturamentos.py',
             tabela_destino='bronze.faturamentos',
-            arquivo_nome='faturamentos.csv',
-            input_subdir='onedrive'
+            arquivo_nome='faturamentos.csv'
         )
 
     def get_column_mapping(self) -> Dict[str, str]:
@@ -266,7 +264,7 @@ All ETL runs are tracked in `credits.historico_atualizacoes`:
 
 ### File Paths (Inside Docker Container)
 
-- **Input CSVs**: `/app/data/input/onedrive/`
+- **Input CSVs**: `/app/data/input/`
 - **Processed Archive**: `/app/data/processed/`
 - **Templates**: `/app/data/templates/` (example CSV files with headers)
 - **Logs**: `/app/logs/`
@@ -324,7 +322,7 @@ Colunas nomeadas como `data_*` ou `dt_*` são automaticamente formatadas para `Y
 1. Create new file in `python/ingestors/csv/ingest_<name>.py`
 2. Implement class inheriting from `BaseCSVIngestor`
 3. Define column mappings, Bronze column list, AND validation rules (required in v2.0)
-4. Add CSV file to `docker/data/input/onedrive/`
+4. Add CSV file to `docker/data/input/`
 5. Create corresponding Bronze table in PostgreSQL
 6. Create database migration for `credits.logs_rejeicao` if not exists
 7. Add ingestor instance to `python/run_bronze_ingestors.py` if it should run with all ingestors

@@ -1,9 +1,0 @@
-CNPJ/CPF PK;Tipo;Status;Status de Qualificação da conta;Data de criação;Grupo;Razão Social;Responsável da Conta;Financeiro;Corte;Faixa
-25350101000113;PJ;Ativo;Qualificado;15/01/2023;Grupo A;BEMFIBRAS COMERCIO DE PRODUTOS FUNCIONAIS LTDA;Jessica Mognon;financeiro@exemplo1.com;Corte 1;Faixa 1
-71884803000102;PJ;Ativo;Não Qualificado;20/11/2022;Grupo B;VITALFLEX COMERCIO DE COLCHOES LTDA;Jessica Mognon;financeiro@exemplo2.com;Corte 2;Faixa 2
-7733015000108;;Inativo;;;;TORCISAO COMERCIAL E INDUSTRIAL DE ACOS LTDA;Jessica Mognon;;;
-5508797000156;;Ativo;;;;PROTECNICA SEGURANCA EQUIP PROTECAO INDIVIDUAL LTDA;Jessica Mognon;;;
-22616469000516;;;;;;GABRIEL PERES MUGARTE;Jessica Mognon;;;
-61200974000103;;;;;;EASETRACK CONSULTORIA LTDA;Jessica Mognon;;;
-61587426000188;;;;;;OTICAS G2 LTDA;Rafael Flores;;;
-58237440000147;;;;;;PERSONALITE OPTICAL LTDA;Rafael Flores;;;
