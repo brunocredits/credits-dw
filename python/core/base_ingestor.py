@@ -71,11 +71,23 @@ class BaseIngestor(ABC):
             print(f"[{self.name}] 📂 {file_path.name}")
             self.process_file(conn, file_path)
             
-            # Move to processed
+            # Move to processed (Organized by Date)
             try:
                 import shutil
-                dest = PROCESSED_DIR / f"{self.timestamp}_{file_path.name}"
+                
+                # Create date-based structure: processed/YYYY/MM/DD/
+                today = datetime.now()
+                date_path = PROCESSED_DIR / today.strftime("%Y") / today.strftime("%m") / today.strftime("%d")
+                date_path.mkdir(parents=True, exist_ok=True)
+                
+                # Keep original name but prepend timestamp to avoid collisions within same day
+                timestamp = today.strftime("%H%M%S")
+                new_filename = f"{timestamp}_{file_path.name}"
+                dest = date_path / new_filename
+                
                 shutil.move(str(file_path), str(dest))
+                print(f"   📂 Arquivado em: {date_path.relative_to(PROCESSED_DIR)}/{new_filename}")
+                
             except Exception as e:
                 print(f"   ⚠️  Erro ao mover arquivo: {e}")
 
