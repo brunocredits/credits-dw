@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from contextlib import contextmanager
 from uuid import uuid4
-from utils.db_connection import get_cursor
+from .db_connection import get_connection, get_cursor
+from .logger import setup_logger
 
 def registrar_execucao(conn, script_nome: str, camada: str,
                        tabela_origem: Optional[str] = None,

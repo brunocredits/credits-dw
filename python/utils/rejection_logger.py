@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional, List
 from datetime import datetime
 from psycopg2 import sql
 
-from utils.db_connection import get_cursor
-from utils.logger import setup_logger
+from .db_connection import get_cursor
+from .logger import setup_logger
 
 logger = setup_logger('rejection_logger')
 

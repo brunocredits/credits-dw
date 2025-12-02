@@ -11,7 +11,7 @@ from typing import Optional, Generator
 from contextlib import contextmanager
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from utils.config import get_db_config
+from .config import get_db_config
 
 
 # Pool de conexões global

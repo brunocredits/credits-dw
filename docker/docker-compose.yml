@@ -10,47 +10,23 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: credits-dw-etl
-    restart: unless-stopped
-
+    # restart: no  <-- Don't restart automatically, we want it to run on demand or keep alive
+    
     environment:
-      # Database configuration (loaded from .env file)
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
-
-      # Logging configuration
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-
-      # Timezone
       TZ: America/Sao_Paulo
 
     volumes:
+      # Code
       - ../python:/app/python
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./sql:/app/docker/sql
-      - ../.env:/app/.env:ro
+      # Data (Input/Processed/Templates)
+      - ./data:/app/docker/data
+      # Logs
+      - ../logs:/app/logs
 
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 2G
-        reservations:
-          cpus: "0.5"
-          memory: 512M
-
-    user: root
-    command: >
-      bash -c "chown -R etl_user:etl_user /app/logs /app/data &&
-      chmod -R 777 /app/logs /app/data &&
-      exec su etl_user -c \"tail -f /dev/null\""
-
-    healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    # Keep container alive for manual execution or cron
+    command: tail -f /dev/null
