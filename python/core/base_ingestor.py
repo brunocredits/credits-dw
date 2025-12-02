@@ -29,7 +29,6 @@ class BaseIngestor(ABC):
     def __init__(self, name, target_table, mandatory_cols):
         self.name = name
         self.target_table = target_table
-        self.error_table = f"bronze.erro_{target_table.split('.')[1]}"
         self.mandatory_cols = mandatory_cols
         
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -166,7 +165,7 @@ class BaseIngestor(ABC):
 
             # 6. Handle Errors (Batch Insert)
             if not error_df.empty:
-                error_count = self.insert_errors(conn, error_df, file_path.name)
+                error_count = self.insert_errors(conn, error_df, file_path.name, exec_id)
 
             # 7. Logging & Metrics (Minimal for Docker)
             duration = time.time() - start_time
@@ -202,21 +201,39 @@ class BaseIngestor(ABC):
                 print(f"   ❌ Erro no COPY: {e}")
                 return 0
 
-    def insert_errors(self, conn, error_df, filename):
+    def insert_errors(self, conn, error_df, filename, exec_id):
         """
-        Inserts errors into the error table.
+        Inserts errors into auditoria.log_rejeicao with FK to historico_execucao.
         """
         error_data = []
-        for _, row in error_df.iterrows():
+        for idx, row in error_df.iterrows():
             missing = [c for c in self.mandatory_cols 
                       if pd.isna(row.get(c)) or str(row.get(c)).strip() == '']
-            reason = f"Campos obrigatórios vazios: {', '.join(missing)}"
-            error_data.append((str(row.to_dict()), reason, filename))
+            
+            campo_falha = ', '.join(missing) if missing else 'unknown'
+            motivo = f"Campos obrigatórios vazios: {campo_falha}"
+            
+            error_data.append((
+                exec_id,                          # execucao_fk (UUID)
+                f"ingest_{self.name}",           # script_nome
+                self.target_table,                # tabela_destino
+                idx + 2,                          # numero_linha (header = 1, data starts at 2)
+                campo_falha,                      # campo_falha
+                motivo,                           # motivo_rejeicao
+                None,                             # valor_recebido (opcional)
+                str(row.to_dict()),              # registro_completo
+                'ERROR'                           # severidade
+            ))
         
         if error_data:
             with get_cursor(conn) as cur:
                 from psycopg2.extras import execute_values
-                sql = f"INSERT INTO {self.error_table} (linha_original, motivo_descarte, source_filename) VALUES %s"
+                sql = """
+                    INSERT INTO auditoria.log_rejeicao 
+                    (execucao_fk, script_nome, tabela_destino, numero_linha, 
+                     campo_falha, motivo_rejeicao, valor_recebido, registro_completo, severidade)
+                    VALUES %s
+                """
                 execute_values(cur, sql, error_data, page_size=1000)
                 conn.commit()
         
