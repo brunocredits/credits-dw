@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-# Install system dependencies (required for psycopg2 and some pandas engines)
+# Install system dependencies (required for psycopg2)
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
@@ -8,16 +8,15 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy requirements if they exist, otherwise install manually for speed
+# Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt || \
-    pip install --no-cache-dir pandas psycopg2-binary openpyxl pyarrow tabulate
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application
-COPY . .
+# Copy the application code
+COPY python /app/python
 
 # Set PYTHONPATH
 ENV PYTHONPATH=/app
 
-# Default command
+# Default command (run pipeline)
 CMD ["python3", "python/scripts/run_pipeline.py"]

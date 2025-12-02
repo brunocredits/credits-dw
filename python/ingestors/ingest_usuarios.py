@@ -5,15 +5,19 @@ class IngestUsuarios(BaseIngestor):
         super().__init__(
             name="usuarios",
             target_table="bronze.usuarios",
-            mandatory_cols=['consultor', 'cargo'],
-            money_cols=['meta', 'mensal_fidelidade', 'meta_anual', 'meta_jan', 'meta_fev', 'meta_mar', 'meta_abr', 'meta_mai', 'meta_jun', 'meta_jul', 'meta_ago', 'meta_set', 'meta_out', 'meta_nov', 'meta_dez']
+            mandatory_cols=['consultor', 'cargo']
         )
 
     def get_column_mapping(self):
+        """
+        Maps CSV headers to database columns.
+        Most headers match, only acesso_temporario needs mapping.
+        """
         return {
-            'consultor_a': 'consultor',
-            'mensal_fidelidade': 'mensal_fidelidade',
-            'acesso_diretoria': 'acesso_diretoria'
+            # All other fields match DB columns exactly:
+            # cargo, status_vendedor, consultor, nivel, time,
+            # acesso_vendedor, acesso_gerente, acesso_indireto,
+            # acesso_diretoria, acesso_temporario
         }
 
 if __name__ == "__main__":

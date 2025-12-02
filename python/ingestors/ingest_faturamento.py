@@ -5,36 +5,56 @@ class IngestFaturamento(BaseIngestor):
         super().__init__(
             name="faturamento",
             target_table="bronze.faturamento",
-            mandatory_cols=['numero_documento', 'cliente_nome_fantasia'],
-            date_cols=[
-                'previsao_recebimento', 'ultimo_recebimento', 'vencimento', 
-                'data_emissao', 'ultima_alteracao', 'data_fat'
-            ],
-            money_cols=[
-                'valor_conta', 'valor_liquido', 'impostos_retidos', 'desconto', 
-                'juros_multa', 'valor_recebido', 'valor_a_receber'
+            mandatory_cols=[
+                'nota_fiscal', 
+                'nome_fantasia', 
+                'valor_conta', 
+                'valor_liquido',
+                'impostos', 
+                'desconto', 
+                'juros_multa', 
+                'valor_recebido',
+                'valor_receber', 
+                'vencimento', 
+                'data_emissao', 
+                'razao_social',
+                'cnpj', 
+                'data_fat', 
+                'empresa'
             ]
         )
 
     def get_column_mapping(self):
+        """
+        Maps CSV headers (after user corrections) to database columns.
+        Only includes mappings where CSV header != DB column.
+        """
         return {
-            'numero_do_documento': 'numero_documento',
-            'nota_fiscal_cupom_fiscal': 'nota_fiscal',
-            'cliente_nome_fantasia_': 'cliente_nome_fantasia',
-            'cliente_nome_fantasia': 'cliente_nome_fantasia',
-            'valor_da_conta': 'valor_conta',
-            'valor_liquido_': 'valor_liquido',
-            'previsao_de_recebimento': 'previsao_recebimento',
-            'juros_e_multa': 'juros_multa',
-            'numero_do_boleto': 'numero_boleto',
-            'tipo_de_documento': 'tipo_documento',
-            'data_de_emissao': 'data_emissao',
-            'cliente_razao_social': 'cliente_razao_social',
-            'cliente_sem_pontuacao': 'cliente_sem_pontuacao',
-            'tags_do_cliente': 'tags_cliente',
-            'tags_do_cliente_1': 'tags_cliente', # Catch duplicate
-            'data_fat': 'data_fat',
-            'ms': 'ms'
+            # Status field
+            'a_vencer_boleto_gerado': 'status',
+            
+            # Cliente fields
+            'nome_fantasia': 'cliente_nome_fantasia',
+            'razao_social': 'cliente_razao_social',
+            'cnpj': 'cliente_sem_pontuacao',
+            
+            # Valor fields
+            'impostos': 'impostos_retidos',
+            'valor_receber': 'valor_a_receber',
+            
+            # Other fields
+            'obs': 'observacao',
+            
+            # Fields that match DB columns (no mapping needed):
+            # numero_documento, parcela, nota_fiscal, previsao_recebimento,
+            # ultimo_recebimento, valor_conta, valor_liquido, desconto,
+            # juros_multa, valor_recebido, categoria, operacao, vendedor,
+            # projeto, conta_corrente, numero_boleto, tipo_documento,
+            # vencimento, data_emissao, ultima_alteracao, incluido_por,
+            # alterado_por, data_fat, empresa, ms
+            
+            # Fields in CSV but not in DB (will be ignored):
+            # ano, inclusao
         }
 
 if __name__ == "__main__":

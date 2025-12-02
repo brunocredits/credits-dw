@@ -1,7 +1,8 @@
+version: '3.8'
+
 # ============================================================================
-# Docker Compose - Credits Brasil ETL Processor
-# Versão: 2.1
-# Data: Novembro 2025
+# Docker Compose - Credits Brasil Data Warehouse
+# Pipeline de Ingestão Bronze (RAW-FIRST)
 # ============================================================================
 
 services:
@@ -10,23 +11,52 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: credits-dw-etl
-    # restart: no  <-- Don't restart automatically, we want it to run on demand or keep alive
-    
+
     environment:
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       TZ: America/Sao_Paulo
 
     volumes:
-      # Code
+      # Code (for development)
       - ../python:/app/python
-      # Data (Input/Processed/Templates)
-      - ./data:/app/docker/data
+      # Data directories
+      - ./data/input:/app/docker/data/input
+      - ./data/processed:/app/docker/data/processed
+      - ./data/templates:/app/docker/data/templates
       # Logs
       - ../logs:/app/logs
 
-    # Keep container alive for manual execution or cron
-    command: tail -f /dev/null
+    depends_on:
+      db:
+        condition: service_healthy
+
+    # Run pipeline on start
+    command: python3 python/scripts/run_pipeline.py
+
+  db:
+    image: postgres:13-alpine
+    container_name: credits-dw-db
+
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
