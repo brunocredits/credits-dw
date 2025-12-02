@@ -8,17 +8,18 @@ from .logger import setup_logger
 
 def registrar_execucao(conn, script_nome: str, camada: str,
                        tabela_origem: Optional[str] = None,
-                       tabela_destino: Optional[str] = None) -> str:
+                       tabela_destino: Optional[str] = None,
+                       file_hash: Optional[str] = None) -> str:
     """Registra início de execução ETL. Retorna UUID como string"""
     exec_id = str(uuid4())
     query = """
         INSERT INTO auditoria.historico_execucao
-        (id, script_nome, camada, tabela_origem, tabela_destino, data_inicio, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        (id, script_nome, camada, tabela_origem, tabela_destino, data_inicio, status, file_hash)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
     with get_cursor(conn) as cur:
         cur.execute(query, (exec_id, script_nome, camada, tabela_origem, tabela_destino,
-                           datetime.now(), 'em_execucao'))
+                           datetime.now(), 'em_execucao', file_hash))
         conn.commit()
         return exec_id
 

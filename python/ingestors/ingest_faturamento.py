@@ -7,18 +7,18 @@ class IngestFaturamento(BaseIngestor):
             target_table="bronze.faturamento",
             mandatory_cols=[
                 'nota_fiscal', 
-                'nome_fantasia', 
+                'cliente_nome_fantasia', 
                 'valor_conta', 
                 'valor_liquido',
-                'impostos', 
+                'impostos_retidos', 
                 'desconto', 
                 'juros_multa', 
                 'valor_recebido',
-                'valor_receber', 
+                'valor_a_receber', 
                 'vencimento', 
                 'data_emissao', 
-                'razao_social',
-                'cnpj', 
+                'cliente_razao_social',
+                'cliente_sem_pontuacao', 
                 'data_fat', 
                 'empresa'
             ]
@@ -39,22 +39,19 @@ class IngestFaturamento(BaseIngestor):
             'cnpj': 'cliente_sem_pontuacao',
             
             # Valor fields
-            'impostos': 'impostos_retidos',
-            'valor_receber': 'valor_a_receber',
+            'valor_da_conta': 'valor_conta',
+            'descontos': 'desconto',
             
-            # Other fields
-            'obs': 'observacao',
+            # Typo correction
+            'categorioa': 'categoria',
             
             # Fields that match DB columns (no mapping needed):
             # numero_documento, parcela, nota_fiscal, previsao_recebimento,
-            # ultimo_recebimento, valor_conta, valor_liquido, desconto,
-            # juros_multa, valor_recebido, categoria, operacao, vendedor,
+            # ultimo_recebimento, valor_liquido, impostos_retidos,
+            # juros_multa, valor_recebido, valor_a_receber, operacao, vendedor,
             # projeto, conta_corrente, numero_boleto, tipo_documento,
             # vencimento, data_emissao, ultima_alteracao, incluido_por,
-            # alterado_por, data_fat, empresa, ms
-            
-            # Fields in CSV but not in DB (will be ignored):
-            # ano, inclusao
+            # alterado_por, data_fat, empresa, ms, observacao
         }
 
 if __name__ == "__main__":
