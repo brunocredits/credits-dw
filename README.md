@@ -124,34 +124,230 @@ WHERE status = 'sucesso'
   );
 ```
 
-## 📋 Próximos Passos
+## 📋 Roadmap de Desenvolvimento
 
-### 🔄 Camada Silver (Transformação)
-- [ ] Criar módulo de transformação de dados
-- [ ] Implementar deduplicação de registros
-- [ ] Adicionar enriquecimento de dados
-- [ ] Criar tabelas de dimensão (SCD Type 2)
-- [ ] Implementar validações de negócio avançadas
+### 🔄 Fase 2: Camada Silver (Transformação e Qualidade)
 
-### 📊 Camada Gold (Agregação)
-- [ ] Criar views materializadas para dashboards
-- [ ] Implementar métricas de negócio
-- [ ] Adicionar tabelas de fatos agregadas
-- [ ] Otimizar para queries analíticas
+**Objetivo**: Dados limpos, deduplicados e enriquecidos prontos para análise
 
-### 🔧 Melhorias Técnicas
-- [ ] Implementar testes unitários (pytest)
-- [ ] Adicionar testes de integração
-- [ ] Configurar CI/CD (GitHub Actions)
-- [ ] Implementar monitoramento com Prometheus/Grafana
-- [ ] Adicionar alertas automáticos (Slack/Email)
-- [ ] Criar documentação técnica completa (Sphinx)
+#### 2.1 Arquitetura Silver
+```
+silver/
+├── dim_clientes          # Dimensão de clientes (SCD Type 2)
+├── dim_usuarios          # Dimensão de usuários
+├── dim_tempo             # Dimensão temporal (já existe em bronze.data)
+├── fato_faturamento      # Fatos de faturamento transformados
+└── metricas_qualidade    # Métricas de qualidade de dados
+```
 
-### 🚀 Performance
-- [ ] Implementar particionamento de tabelas
-- [ ] Adicionar índices otimizados
-- [ ] Configurar vacuum automático
-- [ ] Implementar cache de queries frequentes
+#### 2.2 Transformações Planejadas
+
+**Deduplicação Inteligente**
+- [ ] Implementar algoritmo de matching fuzzy para clientes
+- [ ] Criar regras de merge baseadas em:
+  - CNPJ (chave primária)
+  - Razão social (similaridade > 85%)
+  - Endereço e telefone (dados auxiliares)
+- [ ] Manter histórico de merges na auditoria
+
+**Enriquecimento de Dados**
+- [ ] Integrar API da Receita Federal (validação CNPJ)
+- [ ] Adicionar geolocalização (CEP → lat/long)
+- [ ] Calcular métricas derivadas:
+  - Aging de recebíveis (dias em atraso)
+  - Score de inadimplência
+  - Ticket médio por cliente
+  - Lifetime Value (LTV)
+
+**Slowly Changing Dimensions (SCD Type 2)**
+- [ ] Implementar versionamento de clientes
+- [ ] Campos de controle:
+  - `valid_from` - Data início vigência
+  - `valid_to` - Data fim vigência
+  - `is_current` - Flag de versão atual
+  - `version` - Número da versão
+- [ ] Trigger automático para criar nova versão em mudanças
+
+**Validações de Negócio**
+- [ ] Regras de consistência:
+  - Valor a receber > 0
+  - Data vencimento >= Data faturamento
+  - Cliente existe na base oficial
+  - Vendedor ativo no sistema
+- [ ] Quarentena para dados suspeitos
+- [ ] Alertas automáticos para anomalias
+
+#### 2.3 Cronograma Silver (Estimativa: 3-4 semanas)
+
+**Semana 1**: Estrutura e Deduplicação
+- Criar schema `silver` no banco
+- Implementar `SilverTransformer` base
+- Desenvolver algoritmo de deduplicação
+- Testes unitários de matching
+
+**Semana 2**: Enriquecimento
+- Integrar APIs externas (Receita Federal)
+- Implementar cálculo de métricas derivadas
+- Adicionar geolocalização
+- Criar pipeline de enriquecimento
+
+**Semana 3**: SCD Type 2
+- Implementar versionamento de dimensões
+- Criar triggers de atualização
+- Desenvolver queries de consulta histórica
+- Testes de integridade temporal
+
+**Semana 4**: Validações e Qualidade
+- Implementar regras de negócio
+- Criar sistema de quarentena
+- Desenvolver dashboard de qualidade
+- Documentação e testes de integração
+
+---
+
+### 📊 Fase 3: Camada Gold (Analytics e BI)
+
+**Objetivo**: Dados agregados e otimizados para consumo em dashboards e relatórios
+
+#### 3.1 Arquitetura Gold
+```
+gold/
+├── fato_faturamento_mensal    # Agregação mensal
+├── fato_faturamento_diario    # Agregação diária
+├── metricas_vendedores        # Performance de vendedores
+├── metricas_clientes          # Análise de clientes
+├── metricas_produtos          # Análise de produtos/serviços
+└── kpis_executivos            # KPIs consolidados
+```
+
+#### 3.2 Métricas e KPIs Planejados
+
+**Faturamento**
+- [ ] Receita total (MRR - Monthly Recurring Revenue)
+- [ ] Receita por canal de vendas
+- [ ] Receita por região geográfica
+- [ ] Taxa de crescimento (MoM, YoY)
+- [ ] Forecast de recebimento (próximos 30/60/90 dias)
+
+**Inadimplência**
+- [ ] Taxa de inadimplência (%)
+- [ ] Valor em atraso por faixa (0-30, 31-60, 61-90, 90+ dias)
+- [ ] Top 10 clientes inadimplentes
+- [ ] Provisão para devedores duvidosos (PDD)
+
+**Performance de Vendedores**
+- [ ] Ranking de vendedores (por volume e valor)
+- [ ] Taxa de conversão
+- [ ] Ticket médio por vendedor
+- [ ] Churn de clientes por vendedor
+
+**Análise de Clientes**
+- [ ] Segmentação RFM (Recency, Frequency, Monetary)
+- [ ] Customer Lifetime Value (CLV)
+- [ ] Taxa de retenção/churn
+- [ ] Net Promoter Score (NPS) - se disponível
+
+**Análise Temporal**
+- [ ] Sazonalidade de vendas
+- [ ] Tendências de crescimento
+- [ ] Previsão de demanda (ML)
+
+#### 3.3 Views Materializadas
+
+**Refresh Automático**
+```sql
+-- Exemplo: Atualização incremental diária
+CREATE MATERIALIZED VIEW gold.fato_faturamento_diario AS
+SELECT 
+    d.data,
+    COUNT(DISTINCT f.cliente_id) as clientes_ativos,
+    SUM(f.valor_a_receber) as receita_total,
+    AVG(f.valor_a_receber) as ticket_medio,
+    COUNT(*) as num_transacoes
+FROM silver.fato_faturamento f
+JOIN silver.dim_tempo d ON f.data_faturamento = d.data
+GROUP BY d.data;
+
+-- Refresh diário às 2h da manhã
+CREATE INDEX idx_gold_fat_diario_data ON gold.fato_faturamento_diario(data);
+REFRESH MATERIALIZED VIEW CONCURRENTLY gold.fato_faturamento_diario;
+```
+
+#### 3.4 Otimizações de Performance
+
+**Particionamento**
+- [ ] Particionar tabelas por data (mensal)
+- [ ] Implementar partition pruning
+- [ ] Configurar auto-vacuum por partição
+
+**Índices Estratégicos**
+- [ ] Índices compostos para queries frequentes
+- [ ] Índices parciais para filtros comuns
+- [ ] BRIN indexes para colunas temporais
+
+**Agregações Pré-calculadas**
+- [ ] Cubos OLAP para análise multidimensional
+- [ ] Rollup tables para diferentes granularidades
+- [ ] Cache de queries complexas (Redis)
+
+#### 3.5 Cronograma Gold (Estimativa: 4-5 semanas)
+
+**Semana 1**: Estrutura Base
+- Criar schema `gold` e tabelas de fatos
+- Implementar agregações básicas (diário/mensal)
+- Desenvolver `GoldAggregator` base
+- Testes de performance iniciais
+
+**Semana 2**: Métricas de Negócio
+- Implementar KPIs de faturamento
+- Desenvolver métricas de inadimplência
+- Criar análises de vendedores
+- Dashboard de métricas em tempo real
+
+**Semana 3**: Analytics Avançado
+- Implementar segmentação RFM
+- Desenvolver análise de cohort
+- Criar previsões com ML (Prophet/ARIMA)
+- Análise de sazonalidade
+
+**Semana 4**: Otimização
+- Implementar particionamento
+- Criar índices otimizados
+- Configurar views materializadas
+- Testes de carga e performance
+
+**Semana 5**: Integração BI
+- Conectar Power BI / Metabase
+- Criar dashboards executivos
+- Desenvolver relatórios automatizados
+- Documentação de uso
+
+---
+
+### 🔧 Melhorias Técnicas Paralelas
+
+**Testes e Qualidade**
+- [ ] Cobertura de testes > 80%
+- [ ] Testes de carga (Apache JMeter)
+- [ ] Testes de regressão automatizados
+
+**DevOps e Infraestrutura**
+- [ ] CI/CD com GitHub Actions
+- [ ] Deploy automatizado (staging → prod)
+- [ ] Rollback automático em falhas
+- [ ] Blue-green deployment
+
+**Observabilidade**
+- [ ] Logs estruturados (JSON)
+- [ ] Métricas customizadas (Prometheus)
+- [ ] Dashboards de monitoramento (Grafana)
+- [ ] Alertas inteligentes (PagerDuty)
+
+**Segurança**
+- [ ] Criptografia de dados em repouso
+- [ ] Auditoria de acessos (quem viu o quê)
+- [ ] Mascaramento de dados sensíveis
+- [ ] Compliance LGPD
 
 ### 🔐 Segurança
 - [ ] Implementar criptografia de dados sensíveis
