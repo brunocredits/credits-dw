@@ -83,10 +83,45 @@ Para limpar dados e preparar nova carga:
 ## 📁 Estrutura de Dados
 
 ### Tabelas Bronze
-- `bronze.faturamento` - Dados de faturamento (32 colunas)
-- `bronze.usuarios` - Cadastro de usuários
-- `bronze.base_oficial` - Base oficial de clientes
-- `bronze.data` - Tabela de datas (dimensão)
+
+| Tabela | Colunas | Registros | Descrição |
+|--------|---------|-----------|------------|
+| `bronze.faturamento` | 36 | 213.403 | Dados de faturamento e recebíveis |
+| `bronze.base_oficial` | 15 | 3.037 | Cadastro de clientes ativos |
+| `bronze.usuarios` | 13 | 40 | Cadastro de consultores/vendedores |
+| `bronze.data` | 17 | 4.018 | Dimensão temporal |
+
+### Índices de Performance
+
+A camada bronze possui **17 índices** (~11.6MB) para otimizar queries:
+
+**faturamento (6 índices)**
+- `idx_faturamento_cnpj` - Join com base_oficial
+- `idx_faturamento_vendedor` - Join com usuarios
+- `idx_faturamento_data_fat` - Filtros temporais
+- `idx_faturamento_empresa_data` - Análises por empresa/período
+- `idx_faturamento_status` - Filtros por status
+- `faturamento_pkey` - Chave primária
+
+**base_oficial (5 índices)**
+- `idx_base_oficial_cnpj` (UNIQUE) - Chave natural, join com faturamento
+- `idx_base_oficial_lider` - Join com usuarios
+- `idx_base_oficial_responsavel` - Join com usuarios
+- `idx_base_oficial_status` - Filtros por status
+- `base_oficial_pkey` - Chave primária
+
+**usuarios (5 índices)**
+- `idx_usuarios_consultor` (UNIQUE) - Chave natural
+- `idx_usuarios_cargo` - Filtros
+- `idx_usuarios_time` - Filtros
+- `idx_usuarios_status` - Filtros
+- `usuarios_pkey` - Chave primária
+
+**data (1 índice)**
+- `data_pkey` - Chave primária (data)
+
+### Views de Monitoramento
+- `bronze.v_index_usage` - Monitoramento de uso e performance dos índices
 
 ### Auditoria
 - `auditoria.historico_execucao` - Log de execuções
@@ -122,6 +157,22 @@ WHERE status = 'sucesso'
     GROUP BY file_hash 
     HAVING COUNT(*) > 1
   );
+```
+
+### Monitorar uso dos índices
+```sql
+-- Ver quais índices estão sendo mais utilizados
+SELECT * FROM bronze.v_index_usage;
+
+-- Verificar tamanho dos índices
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    pg_size_pretty(pg_relation_size(indexrelid)) as size
+FROM pg_stat_user_indexes
+WHERE schemaname = 'bronze'
+ORDER BY pg_relation_size(indexrelid) DESC;
 ```
 
 ## 📋 Roadmap de Desenvolvimento
