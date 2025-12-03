@@ -9,17 +9,17 @@ from python.ingestors.ingest_base_oficial import IngestBaseOficial
 from python.ingestors.ingest_faturamento import IngestFaturamento
 from python.ingestors.ingest_usuarios import IngestUsuarios
 
-# Ingestor mapping for auto-discovery
+# Mapeamento de ingestores com auto-discovery
 INGESTOR_MAPPING = {
     'base_oficial': IngestBaseOficial,
     'faturamento': IngestFaturamento,
     'usuario': IngestUsuarios,
-    'usuarios': IngestUsuarios,  # Accept both spellings
+    'usuarios': IngestUsuarios,  # Aceita ambos dos nomes
 }
 
 def auto_discover_files():
     """
-    Auto-discovers files in input directory and matches them to ingestors.
+   Descoberta automatica dos arquvos em input e faz o match nos ingestores
     """
     input_dir = Path("docker/data/input")
     files = list(input_dir.glob('*.csv')) + list(input_dir.glob('*.xlsx'))

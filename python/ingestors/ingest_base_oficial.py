@@ -15,7 +15,7 @@ class IngestBaseOficial(BaseIngestor):
         so we return an empty dict (no mapping needed).
         """
         return {
-            # All headers match DB columns exactly:
+            # Todos os headers tem que seguir o que está no banco de dados:
             # cnpj, status, manter_no_baseline, razao_social, nome_fantasia,
             # vertical, canal_1, canal_2, lider, responsavel, empresa,
             # grupo, corte, segmento, obs
