@@ -178,23 +178,31 @@ class BaseIngestor(ABC):
         df = df.loc[:, ~df.columns.duplicated()]
 
         # Garante que todas as colunas obrigatórias existam no DataFrame
+        # Se uma coluna obrigatória não existir, ela é criada com valores nulos
         for col in self.mandatory_cols:
             if col not in df.columns: 
                 df[col] = None
             
-        # Todas as linhas são inicialmente consideradas para processamento.
-        # Erros de validação de colunas obrigatórias serão registrados como WARN.
+        # Estratégia de validação: separar warnings (campos obrigatórios vazios) de errors (tipos inválidos)
+        # - valid_df: linhas que serão inseridas no banco (podem ter campos vazios)
+        # - error_df: linhas rejeitadas por erros de conversão de tipo (numérico/data)
+        # - warning_log_entries: registros de campos obrigatórios vazios (não bloqueiam ingestão)
         valid_df = df.copy()
-        error_df = pd.DataFrame(columns=df.columns) # error_df agora é exclusivo para erros de DataCleaner
+        error_df = pd.DataFrame(columns=df.columns)  # Exclusivo para erros do DataCleaner
 
         warning_log_entries = []
+        # Cria máscara booleana para identificar linhas com campos obrigatórios vazios
         rejected_by_mandatory_mask = pd.Series(False, index=df.index)
+        # Identifica todas as linhas que possuem pelo menos um campo obrigatório vazio
         for col in self.mandatory_cols:
             missing_mask = df[col].isna() | (df[col].astype(str).str.strip() == '')
-            rejected_by_mandatory_mask |= missing_mask
+            rejected_by_mandatory_mask |= missing_mask  # OR lógico para acumular violações
         
+        # Para cada linha com campos obrigatórios faltantes, cria um warning log
+        # Importante: estas linhas NÃO são rejeitadas, apenas avisadas (WARN vs ERROR)
         for idx in df[rejected_by_mandatory_mask].index:
             row_data = df.loc[idx].to_dict()
+            # Identifica exatamente quais campos obrigatórios estão vazios nesta linha
             missing_cols_in_row = [c for c in self.mandatory_cols 
                                    if pd.isna(row_data.get(c)) or str(row_data.get(c)).strip() == '']
             
@@ -202,13 +210,13 @@ class BaseIngestor(ABC):
                 warning_log_entries.append({
                     'script_nome': f"ingest_{self.name}",
                     'tabela_destino': self.target_table,
-                    'numero_linha': idx + 2,
+                    'numero_linha': idx + 2,  # +2: +1 para header, +1 para indexação começar em 1
                     'campo_falha': ', '.join(missing_cols_in_row),
                     'motivo_rejeicao': f"Campos obrigatórios vazios: {', '.join(missing_cols_in_row)}",
-                    'valor_recebido': None, # Added missing key
+                    'valor_recebido': None,
                     'registro_completo': str(row_data),
-                    'severidade': 'WARN',
-                    'execucao_fk': None # Será preenchido com exec_id posteriormente
+                    'severidade': 'WARN',  # WARN = não bloqueia ingestão, apenas registra
+                    'execucao_fk': None  # Será preenchido com exec_id após registro da execução
                 })
 
 
@@ -226,35 +234,44 @@ class BaseIngestor(ABC):
             if col not in valid_df.columns: 
                 valid_df[col] = None
 
-        # Limpeza e validação de tipos de dados
+        # === LIMPEZA E VALIDAÇÃO DE TIPOS DE DADOS ===
+        # Esta seção é crítica: converte formatos brasileiros para padrão SQL
+        # e REJEITA linhas com valores inválidos (diferente de warnings acima)
+        
+        # Processamento de colunas numéricas: 1.000,50 → 1000.50
         for col in numeric_cols:
             if col in valid_df.columns:
                 original = valid_df[col].copy()
-                cleaned = DataCleaner.clean_numeric(valid_df[col])
+                cleaned = DataCleaner.clean_numeric(valid_df[col])  # Remove pontos, troca vírgula por ponto
                 
+                # Identifica valores que falharam na conversão (ex: texto em campo numérico)
                 failed = DataCleaner.identify_errors(original, cleaned)
                 if failed.any():
                     print(f"   ⚠️  {failed.sum()} valores numéricos inválidos encontrados na coluna '{col}'")
                     
+                    # Move linhas com erro para error_df (serão logadas com severidade ERROR)
                     rejected_indices = valid_df[failed].index
                     new_errors = valid_df.loc[rejected_indices].copy()
                     new_errors['_custom_error'] = f"Valor numérico inválido em '{col}': " + original[failed].astype(str)
                     
                     error_df = pd.concat([error_df, new_errors]) if not error_df.empty else new_errors
-                    valid_df = valid_df.drop(rejected_indices)
+                    valid_df = valid_df.drop(rejected_indices)  # Remove do DataFrame válido
                     cleaned = cleaned.drop(rejected_indices)
                 
-                valid_df[col] = cleaned
+                valid_df[col] = cleaned  # Substitui coluna original pela versão limpa
 
+        # Processamento de colunas de data: DD/MM/YYYY → YYYY-MM-DD (ISO format)
         for col in date_cols:
             if col in valid_df.columns:
                 original = valid_df[col].copy()
-                cleaned = DataCleaner.clean_date(valid_df[col])
+                cleaned = DataCleaner.clean_date(valid_df[col])  # Converte para datetime
                 
+                # Identifica datas inválidas (ex: "32/13/2023" ou texto em campo de data)
                 failed = DataCleaner.identify_errors(original, cleaned)
                 if failed.any():
                     print(f"   ⚠️  {failed.sum()} datas inválidas encontradas na coluna '{col}'")
                     
+                    # Move linhas com erro de data para error_df
                     rejected_indices = valid_df[failed].index
                     new_errors = valid_df.loc[rejected_indices].copy()
                     new_errors['_custom_error'] = f"Data inválida em '{col}': " + original[failed].astype(str)
@@ -263,8 +280,9 @@ class BaseIngestor(ABC):
                     valid_df = valid_df.drop(rejected_indices)
                     cleaned = cleaned.drop(rejected_indices)
 
+                # Formata datas para string ISO (PostgreSQL aceita diretamente)
                 valid_df[col] = cleaned.dt.strftime('%Y-%m-%d')
-                valid_df.loc[cleaned.isna(), col] = None
+                valid_df.loc[cleaned.isna(), col] = None  # Mantém NaT como NULL
 
         valid_df = valid_df[db_cols].copy()
         valid_df['source_filename'] = file_path.name

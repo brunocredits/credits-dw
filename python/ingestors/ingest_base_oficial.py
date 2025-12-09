@@ -20,15 +20,29 @@ class IngestBaseOficial(BaseIngestor):
         Inicializa o ingestor da base oficial.
         - `name`: Usado para logs e para localizar o template de validação.
         - `target_table`: A tabela de destino no schema bronze.
-        - `mandatory_cols`: Colunas que não podem ser nulas para um registro ser válido.
+        - `mandatory_cols`: Campos essenciais da base oficial de clientes.
+          
+          Campos obrigatórios refletem a estrutura mínima necessária para identificar
+          e categorizar um cliente na hierarquia comercial (empresa > grupo > lider > responsável).
         """
         super().__init__(
             name="base_oficial",
             target_table="bronze.base_oficial",
             mandatory_cols=[
-                'cnpj', 'status', 'manter_no_baseline', 'razao_social',
-                'nome_fantasia', 'canal_1', 'canal_2', 'lider', 'responsavel',
-                'empresa', 'grupo', 'corte', 'segmento', 'obs'
+                'cnpj',              # Identificador único do cliente
+                'status',            # Status do cliente (ativo, inativo, etc.)
+                'manter_no_baseline',# Flag de inclusão em relatórios baseline
+                'razao_social',      # Nome legal da empresa
+                'nome_fantasia',     # Nome comercial
+                'canal_1',           # Canal de atuação primário
+                'canal_2',           # Canal de atuação secundário
+                'lider',             # Líder responsável (hierarquia comercial)
+                'responsavel',       # Responsável direto pela conta
+                'empresa',           # Empresa do grupo (multi-tenant)
+                'grupo',             # Grupo comercial
+                'corte',             # Corte/segmentação
+                'segmento',          # Segmento de mercado
+                'obs'                # Observações importantes
             ]
         )
 

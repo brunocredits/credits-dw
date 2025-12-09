@@ -22,21 +22,23 @@ class IngestFaturamento(BaseIngestor):
         Inicializa o ingestor de faturamento, definindo metadados essenciais.
         - `name`: Usado para logging e para encontrar o template de validação.
         - `target_table`: A tabela de destino no schema bronze.
-        - `mandatory_cols`: Colunas que não podem ser nulas ou vazias para que
-          um registro seja considerado válido.
+        - `mandatory_cols`: Colunas críticas para o negócio (reduzido para evitar falsos positivos).
+          
+          Nota: Na camada Bronze, validações devem ser mínimas. Campos são marcados como
+          obrigatórios apenas quando sua ausência tornaria o registro completamente inútil.
+          Validações de negócio mais rigorosas devem ser feitas na camada Silver.
         """
         super().__init__(
             name="faturamento",
             target_table="bronze.faturamento",
+            # Apenas campos absolutamente essenciais para identificação e processamento
+            # de um registro de faturamento. Outros campos podem ser nulos na Bronze.
             mandatory_cols=[
-                'a_vencer_boleto_gerado', 'numero_documento', 'parcela', 'nota_fiscal',
-                'nome_fantasia', 'previsao_recebimento', 'ultimo_recebimento',
-                'valor_da_conta', 'valor_liquido', 'impostos_retidos', 'descontos',
-                'juros_multa', 'valor_recebido', 'valor_a_receber', 'categorioa',
-                'operacao', 'vendedor', 'projeto', 'conta_corrente', 'numero_boleto',
-                'tipo_documento', 'vencimento', 'data_emissao', 'data_registro',
-                'razao_social', 'cnpj', 'observacao', 'ultima_alteracao',
-                'incluido_por', 'alterado_por', 'data_fat', 'empresa', 'ms'
+                'numero_documento',  # Identificador único do documento
+                'cnpj',              # Cliente (essencial para joins)
+                'data_fat',          # Data de faturamento (essencial para análises temporais)
+                'valor_da_conta',    # Valor principal do documento
+                'empresa'            # Empresa emissora (multi-tenant)
             ]
         )
 
@@ -53,8 +55,8 @@ class IngestFaturamento(BaseIngestor):
                   valores são os nomes das colunas correspondentes no banco de dados.
         """
         return {
-            'nome_fantasia': 'cliente_nome_fantasia',
-            'categorioa': 'categoria',
+            'nome_fantasia': 'cliente_nome_fantasia',  # Renomeia para clareza (especifica que é do cliente)
+            'categorioa': 'categoria',                 # Corrige typo no arquivo fonte
         }
 
 if __name__ == "__main__":

@@ -20,7 +20,13 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# Load .env variables
+set -a  # automatically export all variables
+source .env
+set +a
+
 echo -e "${YELLOW}⚠️  ATENÇÃO: Isso vai apagar todos os dados das tabelas Bronze (exceto datas) e limpar os arquivos processados.${NC}"
+echo -e "${YELLOW}   Banco: ${DB_NAME} @ ${DB_HOST}${NC}"
 echo -e "${YELLOW}   Tem certeza? (s/N)${NC}"
 read -r response
 if [[ ! "$response" =~ ^([sS][sS]|[sS])$ ]]; then

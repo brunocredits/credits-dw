@@ -7,14 +7,7 @@ Este documento contém exemplos de queries SQL para extrair insights iniciais da
 ### 1.1. Receita Líquida Total por Mês de Emissão
 Analisa a evolução do faturamento liquido ao longo do tempo.
 ```sql
-SELECT 
-    TO_CHAR(data_emissao, 'YYYY-MM') as mes_referencia, 
-    SUM(valor_liquido) as total_faturado
-FROM bronze.faturamento 
-WHERE data_emissao IS NOT NULL
-GROUP BY 1 
-ORDER BY 1 DESC;
-```
+redits11```
 
 ### 1.2. Top 10 Clientes por Valor Faturado
 Identifica os clientes mais valiosos com base no valor líquido total.

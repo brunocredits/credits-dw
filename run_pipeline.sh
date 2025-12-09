@@ -25,8 +25,17 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Load .env
-export $(cat .env | grep -v '^#' | xargs)
+echo -e "${GREEN}✓ Arquivo .env encontrado${NC}"
+echo -e "${BLUE}📝 Usando credenciais:${NC}"
+echo -e "${YELLOW}   DB: $(grep '^DB_NAME=' .env | cut -d'=' -f2)${NC}"
+echo -e "${YELLOW}   User: $(grep '^DB_USER=' .env | cut -d'=' -f2)${NC}"
+echo -e "${YELLOW}   Host: $(grep '^DB_HOST=' .env | cut -d'=' -f2)${NC}"
+echo ""
+
+# Load .env variables and export them
+set -a  # automatically export all variables
+source .env
+set +a
 
 # Navigate to docker directory
 cd docker

@@ -1,72 +1,65 @@
-# Claude/AI files
-.claude/
-GEMINI.md
 
-# Security - Environment and credentials
+*~
+*$py.class
+*.backup
+.claude/
+# Claude/AI files
+*credentials*.json
+*.crt
+*.csv
+# Database dumps
+# Data files - Prevent committing sensitive data
+desktop.ini
+*.doc
+docker/data/input/**/*.csv
+docker/data/input/**/*.xls
+docker/data/input/**/*.xlsx
+docker/data/processed/
+docker/data/templates/*.csv
+!docker/data/templates/.gitkeep
+docker/data/templates/*.xlsx
+docker/logs/
+docker/sql/
+DOCUMENTATION.md
+# Documentation that may be outdated
+*.docx
+.DS_Store
+*.dump
 .env
 .env.*
-!.env.example
-*.pem
-*.key
-*.crt
-*.p12
-*credentials*.json
-*secrets*.yaml
-
-# Data files - Prevent committing sensitive data
-docker/data/processed/
-docker/data/input/**/*.csv
-docker/data/input/**/*.xlsx
-docker/data/input/**/*.xls
-docker/data/templates/*.csv
-docker/data/templates/*.xlsx
-!docker/data/templates/.gitkeep
-*.csv
-*.xlsx
-*.xls
-Pasta1(1).csv
-Pasta1(1).xlsx
-
-# Logs
-docker/logs/
-logs/
-*.log
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
 env/
 ENV/
-.venv
-
-# SQL scripts that may contain sensitive data
-docker/sql/
-
-# Documentation that may be outdated
-DOCUMENTATION.md
-
-# Office documents that may contain sensitive data
-*.docx
-*.doc
-"Modelo Padrão (Resumos).docx"
-
-# Database dumps
-*.sql
-*.dump
-*.backup
-
+!.env.example
+GEMINI.md
 # IDE
-.vscode/
 .idea/
-*.swp
-*.swo
-*~
-
+*.key
+*.log
+logs/
+# Logs
+"Modelo Padrão (Resumos).docx"
+# Office documents that may contain sensitive data
 # OS
-.DS_Store
+*.p12
+Pasta1(1).csv
+Pasta1(1).xlsx
+*.pem
+*.pyc
+__pycache__/
+__pycache__/
+*.py[cod]
+# Python
+.Python
+*secrets*.yaml
+# Security - Environment and credentials
+*.so
+*.sql
+# SQL scripts that may contain sensitive data
+*.swo
+*.swp
 Thumbs.db
-desktop.ini
+.venv
+venv/
+.vscode/
+*.xls
+*.xlsx
