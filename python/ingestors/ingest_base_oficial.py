@@ -25,7 +25,11 @@ class IngestBaseOficial(BaseIngestor):
         super().__init__(
             name="base_oficial",
             target_table="bronze.base_oficial",
-            mandatory_cols=['cnpj', 'status', 'manter_no_baseline']
+            mandatory_cols=[
+                'cnpj', 'status', 'manter_no_baseline', 'razao_social',
+                'nome_fantasia', 'canal_1', 'canal_2', 'lider', 'responsavel',
+                'empresa', 'grupo', 'corte', 'segmento', 'obs'
+            ]
         )
 
     def get_column_mapping(self):
@@ -38,10 +42,7 @@ class IngestBaseOficial(BaseIngestor):
         Returns:
             dict: Um dicionário vazio.
         """
-        return {
-            # Nomes de colunas no arquivo de origem e no banco de dados são os mesmos.
-            # Nenhuma tradução é necessária.
-        }
+        return {}
 
 if __name__ == "__main__":
     # Permite a execução do ingestor como um script independente

@@ -29,21 +29,14 @@ class IngestFaturamento(BaseIngestor):
             name="faturamento",
             target_table="bronze.faturamento",
             mandatory_cols=[
-                'nota_fiscal', 
-                'cliente_nome_fantasia', 
-                'valor_da_conta', 
-                'valor_liquido',
-                'impostos_retidos', 
-                'descontos', 
-                'juros_multa', 
-                'valor_recebido',
-                'valor_a_receber', 
-                'vencimento', 
-                'data_emissao', 
-                'razao_social',
-                'cnpj', 
-                'data_fat', 
-                'empresa'
+                'a_vencer_boleto_gerado', 'numero_documento', 'parcela', 'nota_fiscal',
+                'nome_fantasia', 'previsao_recebimento', 'ultimo_recebimento',
+                'valor_da_conta', 'valor_liquido', 'impostos_retidos', 'descontos',
+                'juros_multa', 'valor_recebido', 'valor_a_receber', 'categorioa',
+                'operacao', 'vendedor', 'projeto', 'conta_corrente', 'numero_boleto',
+                'tipo_documento', 'vencimento', 'data_emissao', 'data_registro',
+                'razao_social', 'cnpj', 'observacao', 'ultima_alteracao',
+                'incluido_por', 'alterado_por', 'data_fat', 'empresa', 'ms'
             ]
         )
 
@@ -60,14 +53,8 @@ class IngestFaturamento(BaseIngestor):
                   valores são os nomes das colunas correspondentes no banco de dados.
         """
         return {
-            # Mapeamento de colunas com nomes diferentes
             'nome_fantasia': 'cliente_nome_fantasia',
-            
-            # Correção de erro de digitação no template
             'categorioa': 'categoria',
-            
-            # As colunas restantes têm o mesmo nome no CSV e no banco,
-            # portanto, não precisam de mapeamento explícito.
         }
 
 if __name__ == "__main__":

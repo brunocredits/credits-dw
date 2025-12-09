@@ -25,7 +25,11 @@ class IngestUsuarios(BaseIngestor):
         super().__init__(
             name="usuarios",
             target_table="bronze.usuarios",
-            mandatory_cols=['consultor', 'cargo']
+            mandatory_cols=[
+                'cargo', 'status_vendedor', 'consultor', 'nivel', 'time',
+                'acesso_vendedor', 'acesso_gerente', 'acesso_indireto',
+                'acesso_diretoria', 'acesso_temporario'
+            ]
         )
 
     def get_column_mapping(self):
@@ -39,10 +43,7 @@ class IngestUsuarios(BaseIngestor):
         Returns:
             dict: Um dicionário vazio.
         """
-        return {
-            # Nomes das colunas no CSV e no banco de dados são idênticos,
-            # então nenhum mapeamento é necessário.
-        }
+        return {}
 
 if __name__ == "__main__":
     # Permite que o ingestor seja executado como um script autônomo
