@@ -1,21 +1,35 @@
 """
-DataCleaner - Limpeza e padronização de dados
-Responsável por converter formatos brasileiros e validar tipos de dados
+Este módulo, `DataCleaner`, é responsável pela limpeza e padronização de dados,
+focando na conversão de formatos brasileiros para um padrão universalmente
+reconhecido por bancos de dados e sistemas analíticos.
 """
 
 import pandas as pd
 import numpy as np
 
 class DataCleaner:
-    """Classe utilitária para limpeza de dados numéricos e datas"""
+    """
+    Classe utilitária que encapsula a lógica para limpeza de dados,
+    especificamente para colunas numéricas e de data.
+    """
 
     @staticmethod
     def clean_numeric(series: pd.Series) -> pd.Series:
         """
-        Limpa valores numéricos:
-        - Converte hífen para zero
-        - Converte formato BR (1.000,00) para US (1000.00)
-        - Retorna NaN para valores inválidos
+        Limpa e converte uma série de dados para o tipo numérico.
+
+        A função realiza as seguintes operações:
+        - Remove espaços em branco no início e no fim.
+        - Substitui hífens ('-') por zero.
+        - Converte o formato numérico brasileiro (ex: "1.000,00") para o formato
+          padrão americano (ex: "1000.00").
+        - Converte a série para o tipo numérico, tratando valores inválidos como NaN.
+
+        Args:
+            series (pd.Series): A série de dados a ser limpa.
+
+        Returns:
+            pd.Series: A série com dados numéricos limpos.
         """
         s = series.astype(str).str.strip()
         s = s.replace('-', '0')
@@ -25,16 +39,35 @@ class DataCleaner:
     @staticmethod
     def clean_date(series: pd.Series) -> pd.Series:
         """
-        Limpa datas no formato DD/MM/YYYY
-        Retorna NaT para valores inválidos
+        Converte uma série de dados para o tipo data, assumindo o formato DD/MM/YYYY.
+
+        Valores que não seguem o formato esperado ou são inválidos são
+        convertidos para NaT (Not a Time).
+
+        Args:
+            series (pd.Series): A série de dados a ser convertida.
+
+        Returns:
+            pd.Series: A série com os dados no tipo datetime.
         """
         return pd.to_datetime(series, dayfirst=True, errors='coerce')
 
     @staticmethod
     def identify_errors(original_series: pd.Series, cleaned_series: pd.Series) -> pd.Series:
         """
-        Identifica linhas onde a conversão falhou
-        Retorna máscara booleana (True = erro)
+        Identifica as linhas onde a conversão de tipo de dado falhou.
+
+        A função compara a série original com a série limpa e retorna uma
+        máscara booleana que é `True` para as posições onde a conversão
+        resultou em um valor nulo (NaN ou NaT), mas o valor original não era
+        nulo ou vazio.
+
+        Args:
+            original_series (pd.Series): A série de dados antes da limpeza.
+            cleaned_series (pd.Series): A série de dados após a limpeza.
+
+        Returns:
+            pd.Series: Uma máscara booleana indicando as linhas com erro.
         """
         non_empty = original_series.notna() & (original_series.astype(str).str.strip() != '')
         failed = cleaned_series.isna()

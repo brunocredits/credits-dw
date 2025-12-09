@@ -31,32 +31,5 @@ services:
       # Logs
       - ../logs:/app/logs
 
-    depends_on:
-      db:
-        condition: service_healthy
-
     # Run pipeline on start
     command: python3 python/scripts/run_pipeline.py
-
-  db:
-    image: postgres:13-alpine
-    container_name: credits-dw-db
-
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-
-volumes:
-  db_data:

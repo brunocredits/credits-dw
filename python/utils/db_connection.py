@@ -1,212 +1,73 @@
 """
-Módulo: db_connection.py
-Descrição: Gerenciamento de conexões com PostgreSQL usando context managers
-Versão: 2.0
+Este módulo, `db_connection`, é responsável por gerenciar as conexões com o
+banco de dados PostgreSQL. Ele abstrai a complexidade da criação de conexões,
+oferecendo funções e gerenciadores de contexto (`contextmanager`) para obter
+e liberar conexões e cursores de forma segura e eficiente.
+
+Principais características:
+- Conexão robusta com tentativas automáticas (`retry`) em caso de falha.
+- Gerenciadores de contexto que garantem o fechamento de conexões e cursores.
+- Suporte para cursores que retornam dicionários (`RealDictCursor`).
+- Configuração centralizada através do módulo `config`.
 """
 
 import psycopg2
-from psycopg2.pool import SimpleConnectionPool
 from psycopg2.extras import RealDictCursor
-from typing import Optional, Generator
+from typing import Generator
 from contextlib import contextmanager
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from .config import get_db_config
 
-
-# Pool de conexões global
-_connection_pool: Optional[SimpleConnectionPool] = None
-
-
-def init_connection_pool() -> None:
+@retry(
+    stop=stop_after_attempt(3),  # Tenta no máximo 3 vezes
+    wait=wait_exponential(multiplier=1, min=2, max=10),  # Espera exponencial entre tentativas
+    retry=retry_if_exception_type(psycopg2.OperationalError)  # Só tenta novamente em erros operacionais
+)
+def get_db_connection():
     """
-    Inicializa pool de conexões com configuração centralizada.
+    Cria e retorna uma nova conexão com o banco de dados PostgreSQL.
+
+    Utiliza a biblioteca `tenacity` para tentar reconectar automaticamente em
+    caso de falhas operacionais (ex: instabilidade de rede). As configurações
+    de conexão são obtidas centralizadamente de `get_db_config`.
+
+    Returns:
+        psycopg2.connection: Uma conexão ativa com o banco de dados.
 
     Raises:
-        ValueError: Se variáveis de ambiente não estiverem configuradas
-        psycopg2.Error: Se houver erro na conexão com o banco
+        ConnectionError: Se a conexão falhar após todas as tentativas.
     """
-    global _connection_pool
-
-    if _connection_pool is not None:
-        return  # Pool já inicializado
-
-    db_config = get_db_config()
-
     try:
-        _connection_pool = SimpleConnectionPool(
-            minconn=db_config.pool_min_size,
-            maxconn=db_config.pool_max_size,
+        db_config = get_db_config()
+        conn = psycopg2.connect(
             host=db_config.host,
             port=db_config.port,
             database=db_config.database,
             user=db_config.user,
             password=db_config.password,
-            connect_timeout=db_config.connect_timeout
+            connect_timeout=db_config.connect_timeout,
+            sslmode='require'  # Exige SSL para conexões seguras
         )
+        conn.autocommit = False  # Desabilita autocommit para controle transacional
+        return conn
     except psycopg2.Error as e:
-        # Não usar f-string aqui para evitar problemas com chaves na mensagem
-        raise ConnectionError("Falha ao inicializar pool de conexões: " + str(e)) from e
-
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type(psycopg2.OperationalError)
-)
-def get_db_connection():
-    """
-    Retorna conexão com o banco de dados com retry automático.
-
-    Returns:
-        Conexão psycopg2
-
-    Raises:
-        ValueError: Se variáveis de ambiente obrigatórias não estiverem definidas
-        psycopg2.Error: Se houver erro ao conectar após tentativas
-    """
-    db_config = get_db_config()
-
-    conn = psycopg2.connect(
-        host=db_config.host,
-        port=db_config.port,
-        database=db_config.database,
-        user=db_config.user,
-        password=db_config.password,
-        connect_timeout=db_config.connect_timeout
-    )
-
-    # Configurações de sessão
-    conn.autocommit = False
-
-    return conn
-
+        raise ConnectionError(f"Falha ao conectar ao banco de dados após várias tentativas: {e}") from e
 
 @contextmanager
 def get_connection() -> Generator:
     """
-    Context manager para obter conexão do banco de dados.
-    Garante que a conexão seja fechada após o uso.
+    Um gerenciador de contexto para obter e gerenciar uma conexão com o banco.
+
+    Garante que a conexão seja confirmada (`commit`) em caso de sucesso, revertida
+    (`rollback`) em caso de erro, e sempre fechada ao final do bloco.
 
     Yields:
-        Conexão psycopg2
-
-    Example:
-        ```python
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-        ```
+        psycopg2.connection: A conexão com o banco de dados.
     """
     conn = None
     try:
         conn = get_db_connection()
-        yield conn
-        conn.commit()
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise
-    finally:
-        if conn:
-            conn.close()
-
-
-@contextmanager
-def get_cursor(conn, cursor_factory=None) -> Generator:
-    """
-    Context manager para obter cursor com commit/rollback automático.
-
-    Args:
-        conn: Conexão com o banco de dados
-        cursor_factory: Factory para criar cursor customizado (ex: RealDictCursor)
-
-    Yields:
-        Cursor psycopg2
-
-    Example:
-        ```python
-        with get_connection() as conn:
-            with get_cursor(conn) as cursor:
-                cursor.execute("SELECT * FROM table")
-                results = cursor.fetchall()
-        ```
-    """
-    cursor = conn.cursor(cursor_factory=cursor_factory) if cursor_factory else conn.cursor()
-    try:
-        yield cursor
-    finally:
-        cursor.close()
-
-
-@contextmanager
-def get_dict_cursor(conn) -> Generator:
-    """
-    Context manager para obter cursor que retorna dicionários.
-
-    Args:
-        conn: Conexão com o banco de dados
-
-    Yields:
-        RealDictCursor psycopg2
-
-    Example:
-        ```python
-        with get_connection() as conn:
-            with get_dict_cursor(conn) as cursor:
-                cursor.execute("SELECT * FROM table")
-                rows = cursor.fetchall()  # Lista de dicionários
-        ```
-    """
-    with get_cursor(conn, cursor_factory=RealDictCursor) as cursor:
-        yield cursor
-
-
-def get_pooled_connection():
-    """
-    Retorna conexão do pool.
-
-    Returns:
-        Conexão do pool
-
-    Raises:
-        RuntimeError: Se o pool não foi inicializado
-    """
-    if _connection_pool is None:
-        init_connection_pool()
-
-    return _connection_pool.getconn()
-
-
-def return_pooled_connection(conn) -> None:
-    """
-    Devolve conexão ao pool.
-
-    Args:
-        conn: Conexão a ser devolvida
-    """
-    if _connection_pool:
-        _connection_pool.putconn(conn)
-
-
-@contextmanager
-def get_pooled_connection_context() -> Generator:
-    """
-    Context manager para usar conexão do pool.
-
-    Yields:
-        Conexão do pool
-
-    Example:
-        ```python
-        with get_pooled_connection_context() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-        ```
-    """
-    conn = None
-    try:
-        conn = get_pooled_connection()
         yield conn
         conn.commit()
     except Exception:
@@ -215,24 +76,48 @@ def get_pooled_connection_context() -> Generator:
         raise
     finally:
         if conn:
-            return_pooled_connection(conn)
+            conn.close()
 
+@contextmanager
+def get_cursor(conn, cursor_factory=None) -> Generator:
+    """
+    Gerenciador de contexto para obter um cursor a partir de uma conexão.
 
-def close_all_connections() -> None:
-    """Fecha todas as conexões do pool"""
-    global _connection_pool
+    Garante que o cursor seja fechado ao final do bloco, liberando recursos.
 
-    if _connection_pool:
-        _connection_pool.closeall()
-        _connection_pool = None
+    Args:
+        conn: A conexão ativa com o banco de dados.
+        cursor_factory (optional): Uma fábrica de cursores (ex: RealDictCursor).
 
+    Yields:
+        psycopg2.cursor: O cursor para execução de comandos.
+    """
+    cursor = conn.cursor(cursor_factory=cursor_factory)
+    try:
+        yield cursor
+    finally:
+        cursor.close()
+
+@contextmanager
+def get_dict_cursor(conn) -> Generator:
+    """
+    Gerenciador de contexto que fornece um cursor que retorna resultados como dicionários.
+
+    Args:
+        conn: A conexão ativa com o banco de dados.
+
+    Yields:
+        psycopg2.extras.RealDictCursor: Um cursor que retorna linhas como dicionários.
+    """
+    with get_cursor(conn, cursor_factory=RealDictCursor) as cursor:
+        yield cursor
 
 def test_connection() -> bool:
     """
-    Testa conexão com o banco de dados.
+    Testa a conectividade com o banco de dados executando uma consulta simples.
 
     Returns:
-        bool: True se conexão bem-sucedida, False caso contrário
+        bool: `True` se a conexão for bem-sucedida, `False` caso contrário.
     """
     try:
         with get_connection() as conn:

@@ -1,7 +1,8 @@
 """
-Módulo: logger.py
-Descrição: Configuração de logging usando Loguru para scripts ETL
-Versão: 2.0
+Este módulo, `logger`, configura um sistema de logging robusto e flexível
+para o projeto usando a biblioteca Loguru. Ele padroniza o formato dos logs,
+habilita a rotação automática de arquivos e permite a configuração de
+diferentes níveis de log para o console e para os arquivos.
 """
 
 import sys
@@ -9,136 +10,89 @@ import os
 from pathlib import Path
 from loguru import logger
 
-
 def setup_logger(name: str, log_dir: str = None, rotation: str = "100 MB", retention: str = "30 days") -> "logger":
     """
-    Configura logger usando Loguru para scripts ETL com rotação automática.
+    Configura e retorna um logger Loguru para um script ou módulo específico.
+
+    A configuração inclui:
+    - Um handler para o console com nível de log 'INFO' (ou definido por variável de ambiente).
+    - Um handler para arquivo com rotação, compressão e retenção automáticas.
+    - Um formato de log padronizado e colorido para fácil leitura.
 
     Args:
-        name: Nome do logger (geralmente nome do script)
-        log_dir: Diretório para salvar logs (padrão: /app/logs)
-        rotation: Tamanho máximo do arquivo antes de rotacionar (padrão: 100 MB)
-        retention: Tempo de retenção dos logs antigos (padrão: 30 dias)
+        name (str): O nome do logger, geralmente o nome do script (`__name__`).
+        log_dir (str, optional): Diretório para salvar os arquivos de log.
+                                 Se não for fornecido, detecta o ambiente (local vs. Docker).
+        rotation (str): O critério para rotacionar os arquivos de log (ex: "100 MB", "1 week").
+        retention (str): O tempo para manter os arquivos de log antigos (ex: "30 days").
 
     Returns:
-        Logger Loguru configurado
+        logger: A instância do logger Loguru configurada.
     """
-    # Remover configuração padrão do loguru
+    # Remove a configuração padrão do Loguru para evitar duplicatas
     logger.remove()
 
-    # Determinar diretório de logs
+    # Determina o diretório de logs, detectando o ambiente
     if log_dir is None:
-        # Usa /app/logs se estiver no container, senão usa ./logs
         log_dir = Path('/app/logs') if Path('/app').exists() else Path(__file__).parent.parent.parent / 'logs'
     else:
         log_dir = Path(log_dir)
 
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Formato customizado para os logs
+    # Formato de log customizado para clareza e consistência
     log_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
 
-    # Handler para console (apenas INFO+)
+    # Handler para o console (saída padrão)
     logger.add(
         sys.stdout,
         format=log_format,
-        level=os.getenv("LOG_LEVEL", "INFO"),
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
         colorize=True,
-        backtrace=True,
-        diagnose=True
+        backtrace=True,  # Mostra o stack trace completo em exceções
+        diagnose=True    # Adiciona informações de diagnóstico em exceções
     )
 
-    # Handler para arquivo com rotação (DEBUG+)
+    # Handler para o arquivo de log com rotação
     log_file = log_dir / f"{name}.log"
     logger.add(
         log_file,
         format=log_format,
-        level="DEBUG",
+        level="DEBUG",  # Nível mais detalhado para o arquivo
         rotation=rotation,
         retention=retention,
-        compression="zip",
+        compression="zip",  # Comprime os arquivos de log antigos
         backtrace=True,
         diagnose=True,
         encoding="utf-8"
     )
 
-    # Log de inicialização
-    logger.info(f"Logger '{name}' configurado | Logs: {log_file}")
-
+    logger.info(f"Logger '{name}' configurado. Logs serão salvos em: {log_file}")
     return logger
-
 
 def log_dataframe_info(df, nome: str = "DataFrame", logger_obj=None) -> None:
     """
-    Loga informações detalhadas sobre um DataFrame.
+    Registra um resumo informativo sobre um DataFrame do pandas.
 
     Args:
-        df: DataFrame pandas
-        nome: Nome descritivo do DataFrame
-        logger_obj: Objeto logger a ser usado (padrão: logger global do módulo)
+        df (pd.DataFrame): O DataFrame a ser analisado.
+        nome (str): Um nome descritivo para o DataFrame no log.
+        logger_obj (logger, optional): A instância do logger a ser usada.
     """
-    logger_to_use = logger_obj if logger_obj else logger
+    log = logger_obj or logger
+    log.info(f"📊 Informações do DataFrame '{nome}':")
+    log.info(f"   - Dimensões: {df.shape[0]:,} linhas x {df.shape[1]} colunas")
+    log.info(f"   - Uso de Memória: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
 
-    logger_to_use.info(f"📊 {nome} - Informações:")
-    logger_to_use.info(f"   • Shape: {df.shape[0]:,} linhas x {df.shape[1]} colunas")
-    logger_to_use.info(f"   • Colunas: {list(df.columns)}")
-    logger_to_use.info(f"   • Memória: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-
-    # Valores nulos
     nulls = df.isnull().sum()
     if nulls.sum() > 0:
-        logger_to_use.warning(f"   • Valores nulos detectados:")
+        log.warning("   - Valores Nulos Encontrados:")
         for col, count in nulls[nulls > 0].items():
-            logger_to_use.warning(f"     - {col}: {count:,} ({count/len(df)*100:.1f}%)")
+            log.warning(f"     - '{col}': {count:,} nulos ({count/len(df)*100:.1f}%)")
     else:
-        logger_to_use.success(f"   • Sem valores nulos ✓")
-
-    # Tipos de dados
-    logger_to_use.debug(f"   • Tipos de dados: {df.dtypes.to_dict()}")
-
-
-def log_execution_summary(
-    script_name: str,
-    status: str,
-    linhas_processadas: int = 0,
-    linhas_inseridas: int = 0,
-    duracao_segundos: float = 0
-) -> None:
-    """
-    Loga resumo de execução de um script ETL.
-
-    Args:
-        script_name: Nome do script
-        status: Status da execução (sucesso/erro)
-        linhas_processadas: Total de linhas processadas
-        linhas_inseridas: Total de linhas inseridas
-        duracao_segundos: Duração da execução em segundos
-    """
-    logger.info("=" * 80)
-
-    if status.lower() == 'sucesso':
-        logger.success(f"✅ {script_name} - EXECUÇÃO CONCLUÍDA COM SUCESSO")
-    else:
-        logger.error(f"❌ {script_name} - EXECUÇÃO FALHOU")
-
-    logger.info(f"   • Linhas processadas: {linhas_processadas:,}")
-    logger.info(f"   • Linhas inseridas: {linhas_inseridas:,}")
-
-    if duracao_segundos > 0:
-        minutos, segundos = divmod(duracao_segundos, 60)
-        if minutos > 0:
-            logger.info(f"   • Duração: {int(minutos)}m {segundos:.1f}s")
-        else:
-            logger.info(f"   • Duração: {duracao_segundos:.2f}s")
-
-        # Calcular throughput
-        if linhas_processadas > 0 and duracao_segundos > 0:
-            throughput = linhas_processadas / duracao_segundos
-            logger.info(f"   • Throughput: {throughput:.0f} linhas/segundo")
-
-    logger.info("=" * 80)
+        log.success("   - Nenhum valor nulo encontrado.")

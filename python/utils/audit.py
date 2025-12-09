@@ -1,16 +1,36 @@
-"""Auditoria de execuções ETL"""
+"""
+Este módulo, `audit`, fornece um conjunto de funções para registrar e monitorar
+as execuções dos pipelines de ETL. Ele é essencial para a observabilidade e
+rastreabilidade do processo de ingestão de dados, permitindo registrar o início,
+o fim, o status e as métricas de cada execução.
+"""
 from datetime import datetime
 from typing import Optional, List, Dict
 from contextlib import contextmanager
 from uuid import uuid4
-from .db_connection import get_connection, get_cursor
-from .logger import setup_logger
+from .db_connection import get_cursor
 
 def registrar_execucao(conn, script_nome: str, camada: str,
                        tabela_origem: Optional[str] = None,
                        tabela_destino: Optional[str] = None,
                        file_hash: Optional[str] = None) -> str:
-    """Registra início de execução ETL. Retorna UUID como string"""
+    """
+    Registra o início de uma execução de ETL na tabela de auditoria.
+
+    Cria um novo registro com um UUID único, marcando o status inicial como
+    'em_execucao'.
+
+    Args:
+        conn: A conexão com o banco de dados.
+        script_nome (str): Nome do script ou processo em execução.
+        camada (str): Camada do data warehouse (ex: 'bronze', 'silver').
+        tabela_origem (str, optional): Tabela de origem dos dados.
+        tabela_destino (str, optional): Tabela de destino dos dados.
+        file_hash (str, optional): Hash do arquivo de origem, para controle de duplicatas.
+
+    Returns:
+        str: O ID (UUID) da execução registrada.
+    """
     exec_id = str(uuid4())
     query = """
         INSERT INTO auditoria.historico_execucao
@@ -27,7 +47,19 @@ def finalizar_execucao(conn, execucao_id: str, status: str,
                        linhas_processadas: int = 0, linhas_inseridas: int = 0,
                        linhas_atualizadas: int = 0, linhas_erro: int = 0,
                        mensagem_erro: Optional[str] = None) -> None:
-    """Finaliza registro de execução ETL"""
+    """
+    Atualiza o registro de uma execução de ETL com seu status final e métricas.
+
+    Args:
+        conn: A conexão com o banco de dados.
+        execucao_id (str): O ID da execução a ser finalizada.
+        status (str): O status final ('sucesso' ou 'erro').
+        linhas_processadas (int): Total de linhas lidas da origem.
+        linhas_inseridas (int): Total de linhas inseridas no destino.
+        linhas_atualizadas (int): Total de linhas atualizadas no destino.
+        linhas_erro (int): Total de linhas que resultaram em erro.
+        mensagem_erro (str, optional): Mensagem de erro, caso o status seja 'erro'.
+    """
     query = """
         UPDATE auditoria.historico_execucao
         SET data_fim = %s, status = %s, linhas_processadas = %s,
@@ -41,106 +73,31 @@ def finalizar_execucao(conn, execucao_id: str, status: str,
                            mensagem_erro, execucao_id))
         conn.commit()
 
-def obter_ultima_execucao(conn, script_nome: str) -> Optional[Dict]:
-    """Obtém última execução de um script"""
-    query = """
-        SELECT id, script_nome, camada, data_inicio, data_fim, status,
-               linhas_processadas, linhas_inseridas, mensagem_erro
-        FROM auditoria.historico_execucao
-        WHERE script_nome = %s
-        ORDER BY data_inicio DESC LIMIT 1
-    """
-    with get_cursor(conn) as cur:
-        cur.execute(query, (script_nome,))
-        row = cur.fetchone()
-        if row:
-            return {
-                'id': row[0], 'script_nome': row[1], 'camada': row[2],
-                'data_inicio': row[3], 'data_fim': row[4], 'status': row[5],
-                'linhas_processadas': row[6], 'linhas_inseridas': row[7],
-                'mensagem_erro': row[8]
-            }
-    return None
-
-def listar_execucoes_dia(conn, data: Optional[datetime] = None) -> List[Dict]:
-    """Lista execuções de um dia"""
-    if data is None:
-        data = datetime.now()
-
-    query = """
-        SELECT id, script_nome, camada, data_inicio, data_fim, status,
-               linhas_processadas, linhas_inseridas
-        FROM auditoria.historico_execucao
-        WHERE DATE(data_inicio) = %s
-        ORDER BY data_inicio DESC
-    """
-    with get_cursor(conn) as cur:
-        cur.execute(query, (data.date(),))
-        return [
-            {
-                'id': r[0], 'script_nome': r[1], 'camada': r[2],
-                'data_inicio': r[3], 'data_fim': r[4], 'status': r[5],
-                'linhas_processadas': r[6], 'linhas_inseridas': r[7]
-            }
-            for r in cur.fetchall()
-        ]
-
-def obter_execucoes_em_andamento(conn) -> List[Dict]:
-    """Lista execuções em andamento"""
-    query = """
-        SELECT id, script_nome, camada, tabela_destino, data_inicio, status
-        FROM auditoria.historico_execucao
-        WHERE status = 'em_execucao'
-        ORDER BY data_inicio DESC
-    """
-    with get_cursor(conn) as cur:
-        cur.execute(query)
-        return [
-            {
-                'id': r[0], 'script_nome': r[1], 'camada': r[2],
-                'tabela_destino': r[3], 'data_inicio': r[4], 'status': r[5]
-            }
-            for r in cur.fetchall()
-        ]
-
-def obter_estatisticas_script(conn, script_nome: str, dias: int = 30) -> Dict:
-    """Estatísticas de execução de um script"""
-    query = """
-        SELECT COUNT(*) as total,
-               SUM(CASE WHEN status = 'sucesso' THEN 1 ELSE 0 END) as sucesso,
-               SUM(CASE WHEN status = 'erro' THEN 1 ELSE 0 END) as erro,
-               AVG(EXTRACT(EPOCH FROM (data_fim - data_inicio))) as duracao_media,
-               AVG(linhas_processadas) as media_linhas,
-               MAX(data_inicio) as ultima_exec
-        FROM auditoria.historico_execucao
-        WHERE script_nome = %s
-          AND data_inicio >= NOW() - INTERVAL '1 day' * %s
-          AND status IN ('sucesso', 'erro')
-    """
-    with get_cursor(conn) as cur:
-        cur.execute(query, (script_nome, dias))
-        row = cur.fetchone()
-
-        if row and row[0]:
-            total, sucesso, erro = row[0] or 0, row[1] or 0, row[2] or 0
-            taxa = (sucesso / total * 100) if total > 0 else 0
-            return {
-                'total_execucoes': total, 'total_sucesso': sucesso,
-                'total_erro': erro, 'taxa_sucesso': taxa,
-                'duracao_media_segundos': float(row[3] or 0),
-                'media_linhas_processadas': int(row[4] or 0),
-                'ultima_execucao': row[5]
-            }
-
-    return {
-        'total_execucoes': 0, 'total_sucesso': 0, 'total_erro': 0,
-        'taxa_sucesso': 0, 'duracao_media_segundos': 0,
-        'media_linhas_processadas': 0, 'ultima_execucao': None
-    }
-
 @contextmanager
 def auditar_execucao(conn, script_nome: str, camada: str, tabela_destino: str = None):
-    """Context manager para auditoria automática"""
+    """
+    Um context manager para registrar e finalizar execuções de ETL automaticamente.
+
+    Este gerenciador de contexto simplifica a auditoria, garantindo que cada
+    execução registrada seja finalizada com 'sucesso' ou 'erro', mesmo que
+    exceções ocorram durante o processo.
+
+    Exemplo de uso:
+    ```
+    with auditar_execucao(conn, 'meu_script', 'silver') as (exec_id, stats):
+        # Seu código ETL aqui
+        stats['linhas_inseridas'] = 100
+    ```
+
+    Args:
+        conn: A conexão com o banco de dados.
+        script_nome (str): Nome do script.
+        camada (str): Camada do DW.
+        tabela_destino (str, optional): Tabela de destino.
+
+    Yields:
+        tuple: Um ID de execução e um dicionário para coletar estatísticas.
+    """
     execucao_id = registrar_execucao(conn, script_nome, camada, None, tabela_destino)
     stats = {
         'linhas_processadas': 0, 'linhas_inseridas': 0,
