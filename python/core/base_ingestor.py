@@ -16,6 +16,7 @@ Principais funcionalidades:
 import pandas as pd
 import sys
 import io
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -181,13 +182,35 @@ class BaseIngestor(ABC):
             if col not in df.columns: 
                 df[col] = None
             
-        # Separa registros válidos e inválidos (com base nas colunas obrigatórias)
-        valid_mask = pd.Series(True, index=df.index)
+        # Todas as linhas são inicialmente consideradas para processamento.
+        # Erros de validação de colunas obrigatórias serão registrados como WARN.
+        valid_df = df.copy()
+        error_df = pd.DataFrame(columns=df.columns) # error_df agora é exclusivo para erros de DataCleaner
+
+        warning_log_entries = []
+        rejected_by_mandatory_mask = pd.Series(False, index=df.index)
         for col in self.mandatory_cols:
-            valid_mask &= df[col].notna() & (df[col].astype(str).str.strip() != '')
+            missing_mask = df[col].isna() | (df[col].astype(str).str.strip() == '')
+            rejected_by_mandatory_mask |= missing_mask
+        
+        for idx in df[rejected_by_mandatory_mask].index:
+            row_data = df.loc[idx].to_dict()
+            missing_cols_in_row = [c for c in self.mandatory_cols 
+                                   if pd.isna(row_data.get(c)) or str(row_data.get(c)).strip() == '']
             
-        valid_df = df[valid_mask].copy()
-        error_df = df[~valid_mask].copy()
+            if missing_cols_in_row:
+                warning_log_entries.append({
+                    'script_nome': f"ingest_{self.name}",
+                    'tabela_destino': self.target_table,
+                    'numero_linha': idx + 2,
+                    'campo_falha': ', '.join(missing_cols_in_row),
+                    'motivo_rejeicao': f"Campos obrigatórios vazios: {', '.join(missing_cols_in_row)}",
+                    'valor_recebido': None, # Added missing key
+                    'registro_completo': str(row_data),
+                    'severidade': 'WARN',
+                    'execucao_fk': None # Será preenchido com exec_id posteriormente
+                })
+
 
         with get_cursor(conn) as cur:
             cur.execute(f"SELECT * FROM {self.target_table} LIMIT 0")
@@ -246,12 +269,17 @@ class BaseIngestor(ABC):
         valid_df = valid_df[db_cols].copy()
         valid_df['source_filename'] = file_path.name
         
+        
         exec_id = registrar_execucao(conn, f"ingest_{self.name}", "bronze", 
                                      file_path.name, self.target_table, file_hash)
         
+        # Assign exec_id to warning_log_entries
+        for entry in warning_log_entries:
+            entry['execucao_fk'] = exec_id
+
         inserted_count = 0
-        error_count = 0
-        
+        total_logged_entries = 0 # To count both warnings and errors
+
         try:
             # Limpa dados antigos do mesmo arquivo para evitar duplicatas
             with get_cursor(conn) as cur:
@@ -262,17 +290,21 @@ class BaseIngestor(ABC):
                 inserted_count = self.copy_to_db(conn, valid_df, self.target_table, 
                                                 db_cols + ['source_filename'])
 
-            if not error_df.empty:
-                error_count = self.insert_errors(conn, error_df, file_path.name, exec_id)
+            # Prepare and insert DataCleaner errors
+            data_cleaner_error_entries = self._prepare_data_cleaner_error_entries(error_df, file_path.name, exec_id)
+            total_logged_entries += self.insert_log_entries(conn, data_cleaner_error_entries, exec_id)
+
+            # Insert mandatory column warnings
+            total_logged_entries += self.insert_log_entries(conn, warning_log_entries, exec_id)
 
             duration = time.time() - start_time
-            finalizar_execucao(conn, exec_id, "sucesso", len(df), inserted_count, 0, error_count)
-            print(f"   ✓ Válidos: {inserted_count}/{len(df)} | ✗ Rejeitados: {error_count} | ⏱️ {duration:.1f}s")
+            finalizar_execucao(conn, exec_id, "sucesso", len(df), inserted_count, 0, total_logged_entries)
+            print(f"   ✓ Inseridos: {inserted_count}/{len(df)} | ⚠️/❌ Logs: {total_logged_entries} | ⏱️ {duration:.1f}s")
             
         except Exception as e:
             conn.rollback()
             duration = time.time() - start_time
-            finalizar_execucao(conn, exec_id, "erro", len(df), inserted_count, 0, error_count, str(e))
+            finalizar_execucao(conn, exec_id, "erro", len(df), inserted_count, 0, total_logged_entries, str(e))
             print(f"   ❌ Erro crítico durante a carga no banco: {e}")
             raise
 
@@ -312,47 +344,78 @@ class BaseIngestor(ABC):
                 print(f"   ❌ Erro durante a operação de COPY: {e}")
                 return 0
 
-    def insert_errors(self, conn, error_df, filename, exec_id):
+    def insert_log_entries(self, conn, log_entries, exec_id):
         """
-        Registra as linhas que continham erros em uma tabela de auditoria.
+        Registra as entradas de log (warnings ou errors) em uma tabela de auditoria.
 
         Args:
             conn: Conexão com o banco de dados.
+            log_entries (list): Lista de dicionários, cada um representando uma entrada de log.
+            exec_id (UUID): ID da execução atual.
+
+        Returns:
+            int: Número de entradas de log inseridas.
+        """
+        if not log_entries:
+            return 0
+        
+        # Fill exec_id for all entries
+        for entry in log_entries:
+            entry['execucao_fk'] = exec_id
+            
+        # Convert list of dicts to list of tuples for execute_values
+        columns = ['execucao_fk', 'script_nome', 'tabela_destino', 'numero_linha', 
+                   'campo_falha', 'motivo_rejeicao', 'valor_recebido', 'registro_completo', 'severidade']
+        
+        values = [[entry[col] for col in columns] for entry in log_entries]
+
+        with get_cursor(conn) as cur:
+            from psycopg2.extras import execute_values
+            sql = f"""
+                INSERT INTO auditoria.log_rejeicao 
+                ({', '.join(columns)})
+                VALUES %s
+            """
+            execute_values(cur, sql, values, page_size=1000)
+            conn.commit()
+        
+        return len(log_entries)
+
+    def _prepare_data_cleaner_error_entries(self, error_df, filename, exec_id):
+        """
+        Prepara as entradas de log para linhas que continham erros do DataCleaner.
+
+        Args:
             error_df (pd.DataFrame): DataFrame contendo as linhas com erro.
             filename (str): Nome do arquivo de origem.
             exec_id (UUID): ID da execução atual.
 
         Returns:
-            int: Número de linhas de erro inseridas.
+            list: Lista de dicionários, cada um representando uma entrada de log de erro.
         """
         error_data = []
         
         for idx, row in error_df.iterrows():
+            motivo = 'Erro de limpeza de dados'
+            campo_falha = 'data_cleaning'
             if '_custom_error' in row and pd.notna(row['_custom_error']):
                 motivo = row['_custom_error']
-                campo_falha = 'data_cleaning'
-            else:
-                missing = [c for c in self.mandatory_cols 
-                          if pd.isna(row.get(c)) or str(row.get(c)).strip() == '']
-                campo_falha = ', '.join(missing) if missing else 'unknown'
-                motivo = f"Campos obrigatórios vazios: {campo_falha}"
-            
-            # Prepara os dados para inserção no log de rejeição
-            error_data.append((
-                exec_id, f"ingest_{self.name}", self.target_table, idx + 2,
-                campo_falha, motivo, None, str(row.to_dict()), 'ERROR'
-            ))
+                # Try to extract the failing field from the custom error message
+                match = re.search(r"'(.*?)'", motivo)
+                if match:
+                    campo_falha = match.group(1)
+
+            error_data.append({
+                'execucao_fk': exec_id,
+                'script_nome': f"ingest_{self.name}",
+                'tabela_destino': self.target_table,
+                'numero_linha': idx + 2, # +2 for 0-indexed and header
+                'campo_falha': campo_falha,
+                'motivo_rejeicao': motivo,
+                'valor_recebido': None,
+                'registro_completo': str(row.to_dict()),
+                'severidade': 'ERROR'
+            })
         
-        if error_data:
-            with get_cursor(conn) as cur:
-                from psycopg2.extras import execute_values
-                sql = """
-                    INSERT INTO auditoria.log_rejeicao 
-                    (execucao_fk, script_nome, tabela_destino, numero_linha, 
-                     campo_falha, motivo_rejeicao, valor_recebido, registro_completo, severidade)
-                    VALUES %s
-                """
-                execute_values(cur, sql, error_data, page_size=1000)
-                conn.commit()
-        
-        return len(error_data)
+        return error_data
+
