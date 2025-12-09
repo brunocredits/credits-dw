@@ -11,6 +11,7 @@ Principais características:
 - Configuração centralizada através do módulo `config`.
 """
 
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Generator
@@ -40,6 +41,7 @@ def get_db_connection():
     """
     try:
         db_config = get_db_config()
+        sslmode = os.getenv('DB_SSLMODE', 'require')
         conn = psycopg2.connect(
             host=db_config.host,
             port=db_config.port,
@@ -47,7 +49,7 @@ def get_db_connection():
             user=db_config.user,
             password=db_config.password,
             connect_timeout=db_config.connect_timeout,
-            sslmode='require'  # Exige SSL para conexões seguras
+            sslmode=sslmode
         )
         conn.autocommit = False  # Desabilita autocommit para controle transacional
         return conn
