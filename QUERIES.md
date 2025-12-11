@@ -65,14 +65,14 @@ LIMIT 10;
 
 ---
 
-## 🎯 Análise Específica: JEITTO MEIOS DE PAGAMENTO
+## 🎯 Análise Específica: VIA CERTA FINANCEIRA
 
-### 3. Faturamento Mês a Mês da JEITTO
-**Objetivo:** Analisar a evolução temporal do faturamento específico da JEITTO MEIOS DE PAGAMENTO LTDA, com métricas financeiras detalhadas.
+### 3. Faturamento Mês a Mês da VIA CERTA
+**Objetivo:** Analisar a evolução temporal do faturamento específico da VIA CERTA FINANCEIRA S.A., com métricas financeiras detalhadas.
 
 **Retorna:**
 - `mes`: Mês de referência
-- `cliente_nome_fantasia`: Nome do cliente (JEITTO)
+- `cliente_nome_fantasia`: Nome do cliente (VIA CERTA)
 - `qtd_notas_fiscais`: Quantidade de notas emitidas no mês
 - `faturamento_mes`: Valor total faturado no mês
 - `recebido_mes`: Valor efetivamente recebido no mês
@@ -96,19 +96,19 @@ SELECT
     ) as taxa_recebimento_pct,
     AVG(valor_da_conta) as ticket_medio
 FROM bronze.faturamento
-WHERE cliente_nome_fantasia ILIKE '%JEITTO%'
+WHERE cliente_nome_fantasia ILIKE '%VIA CERTA%'
   AND empresa = 'Credits'
   AND data_fat >= '2022-01-01'
 GROUP BY 1, 2
 ORDER BY 1 DESC;
 ```
 
-### 4. JEITTO com Vendedor e Segmento (JOIN)
-**Objetivo:** Análise 360° da JEITTO cruzando dados de faturamento com informações de vendedor e segmentação do cliente.
+### 4. VIA CERTA com Vendedor e Segmento (JOIN)
+**Objetivo:** Análise 360° da VIA CERTA cruzando dados de faturamento com informações de vendedor e segmentação do cliente.
 
 **Retorna:**
 - `mes`: Mês de referência
-- `cliente_nome_fantasia`: Nome do cliente (JEITTO)
+- `cliente_nome_fantasia`: Nome do cliente (VIA CERTA)
 - `vendedor`: Nome do vendedor responsável
 - `time_vendedor`: Time ao qual o vendedor pertence
 - `cargo`: Cargo do vendedor
@@ -140,7 +140,7 @@ LEFT JOIN bronze.usuarios u
     ON UPPER(TRIM(SPLIT_PART(f.vendedor, '-', 1))) = UPPER(u.consultor)
 LEFT JOIN bronze.base_oficial bo 
     ON f.cnpj = bo.cnpj
-WHERE f.cliente_nome_fantasia ILIKE '%JEITTO%'
+WHERE f.cliente_nome_fantasia ILIKE '%VIA CERTA%'
   AND f.empresa = 'Credits'
   AND f.data_fat >= '2022-01-01'
 GROUP BY 1, 2, 3, 4, 5, 6
