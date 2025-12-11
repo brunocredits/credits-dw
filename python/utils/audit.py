@@ -8,17 +8,21 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from contextlib import contextmanager
 from uuid import uuid4
+import os
+import getpass
 from .db_connection import get_cursor
 
 def registrar_execucao(conn, script_nome: str, camada: str,
                        tabela_origem: Optional[str] = None,
                        tabela_destino: Optional[str] = None,
-                       file_hash: Optional[str] = None) -> str:
+                       file_hash: Optional[str] = None,
+                       usuario_executante: Optional[str] = None) -> str:
     """
     Registra o início de uma execução de ETL na tabela de auditoria.
 
     Cria um novo registro com um UUID único, marcando o status inicial como
-    'em_execucao'.
+    'em_execucao'. Automaticamente captura o usuário do sistema operacional
+    que está executando o script para fins de auditoria.
 
     Args:
         conn: A conexão com o banco de dados.
@@ -27,19 +31,40 @@ def registrar_execucao(conn, script_nome: str, camada: str,
         tabela_origem (str, optional): Tabela de origem dos dados.
         tabela_destino (str, optional): Tabela de destino dos dados.
         file_hash (str, optional): Hash do arquivo de origem, para controle de duplicatas.
+        usuario_executante (str, optional): Usuário que executou. Se não fornecido, 
+                                           é capturado automaticamente do SO.
 
     Returns:
         str: O ID (UUID) da execução registrada.
     """
     exec_id = str(uuid4())
+    
+    # Captura o usuário executante:
+    # Usa DB_USER do .env, que identifica a pessoa (cada um tem seu usuário no banco)
+    # Fallback: usuário do SO ou 'unknown'
+    if usuario_executante is None:
+        # Prioridade 1: DB_USER do .env (identifica a pessoa pelo usuário do banco)
+        usuario_executante = os.getenv('DB_USER')
+        
+        if not usuario_executante:
+            # Prioridade 2: Usuário do SO
+            try:
+                usuario_executante = getpass.getuser()
+            except Exception:
+                pass
+        
+        # Fallback final
+        if not usuario_executante:
+            usuario_executante = 'unknown'
+    
     query = """
         INSERT INTO auditoria.historico_execucao
-        (id, script_nome, camada, tabela_origem, tabela_destino, data_inicio, status, file_hash)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        (id, script_nome, camada, tabela_origem, tabela_destino, data_inicio, status, file_hash, usuario_executante)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     with get_cursor(conn) as cur:
         cur.execute(query, (exec_id, script_nome, camada, tabela_origem, tabela_destino,
-                           datetime.now(), 'em_execucao', file_hash))
+                           datetime.now(), 'em_execucao', file_hash, usuario_executante))
         conn.commit()
         return exec_id
 

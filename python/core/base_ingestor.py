@@ -35,12 +35,10 @@ from python.core.validator import Validator
 INPUT_DIR = Path("docker/data/input")
 PROCESSED_DIR = Path("docker/data/processed")
 TEMPLATE_DIR = Path("docker/data/templates")
-LOG_DIR = Path("logs")
 
 # Cria os diretórios se não existirem
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 TEMPLATE_DIR.mkdir(parents=True, exist_ok=True)
-LOG_DIR.mkdir(exist_ok=True)
 
 class BaseIngestor(ABC):
     """
@@ -67,9 +65,6 @@ class BaseIngestor(ABC):
         self.name = name
         self.target_table = target_table
         self.mandatory_cols = mandatory_cols
-        
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_file = LOG_DIR / f"{self.timestamp}_{name}.log"
         
         self.file_handler = FileHandler(PROCESSED_DIR)
         self.validator = Validator(TEMPLATE_DIR)

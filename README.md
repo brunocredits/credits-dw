@@ -8,7 +8,8 @@ O pipeline é desenvolvido em Python e orquestrado via Docker Compose. Ele supor
 - **Ingestão Dinâmica:** Detecta automaticamente arquivos de `faturamento`, `base_oficial` e `usuarios` no diretório de input.
 - **Validação de Schema:** Verifica se os arquivos de entrada correspondem aos templates esperados.
 - **Limpeza de Dados:** Tratamento básico de tipos numéricos e datas.
-- **Auditoria Robusta:** Logs de execução e tabela de rejeição (`auditoria.log_rejeicao`) detalhada no banco de dados.
+- **Auditoria Robusta:** Histórico de execuções e logs de rejeição (`auditoria.historico_execucao` e `auditoria.log_rejeicao`) no banco de dados.
+- **Rastreamento de Usuário:** Identifica automaticamente quem executou cada processo via `DB_USER` do .env.
 - **Estratégia "Warn-on-Fail":** Registros com campos obrigatórios vazios são ingeridos com um aviso (WARN), enquanto erros críticos de dados rejeitam o registro (ERROR).
 
 ## 🏗️ Estrutura do Projeto
@@ -25,9 +26,8 @@ credits-dw/
 ├── python/
 │   ├── core/            # Lógica base (Ingestor, Validador, Cleaner)
 │   ├── ingestors/       # Classes específicas para cada tipo de arquivo
-│   ├── scripts/         # Scripts executáveis (run_pipeline.py)
-│   └── utils/           # Utilitários (DB, Logger)
-├── logs/                # Logs de execução em arquivo
+│   ├── scripts/         # Scripts executáveis (run_pipeline.py, etc)
+│   └── utils/           # Utilitários (DB, Audit, Logger)
 ├── QUERIES.md           # Exemplos de consultas SQL
 ├── run_pipeline.sh      # Script facilitador para rodar o ETL
 ├── reset_env.sh         # Script para limpar dados e resetar tabelas
@@ -79,8 +79,6 @@ SELECT * FROM auditoria.log_rejeicao ORDER BY data_hora DESC LIMIT 100;
   ```bash
   ./reset_env.sh
   ```
-
-- **Logs:** Verifique a pasta `logs/` para detalhes técnicos da execução.
 
 ## 📝 Decisões de Arquitetura
 
@@ -186,64 +184,51 @@ ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
 3. Valide credenciais do banco
 4. PostgreSQL Azure requer `sslmode=require`
 
+## 📊 Auditoria e Rastreamento
+
+### Histórico de Execuções
+
+Todas as execuções do pipeline são registradas automaticamente em `auditoria.historico_execucao`:
+
+```sql
+SELECT 
+    script_nome,
+    usuario_executante,  -- Identifica quem executou (DB_USER)
+    data_inicio,
+    status,
+    linhas_inseridas,
+    linhas_erro
+FROM auditoria.historico_execucao
+ORDER BY data_inicio DESC
+LIMIT 20;
+```
+
+**Rastreamento automático:**
+- ✅ O sistema usa `DB_USER` do .env para identificar quem executou cada processo
+- ✅ Cada pessoa tem seu próprio usuário no banco, permitindo auditoria completa
+- ✅ Todas as métricas (linhas processadas, inseridas, erros) são registradas
+
+## 📊 Consultas Analíticas
+
+Veja [QUERIES.md](QUERIES.md) para exemplos de queries usando `valor_conta` como métrica principal:
+- Consultas básicas (faturamento por mês, top clientes)
+- Consultas avançadas com JOINs (performance de vendedores, análise 360°)
+- Queries de inadimplência e evolução de carteira
+
 ## 📚 Documentação Adicional
 
-- [QUERIES.md](QUERIES.md) - Exemplos de consultas SQL úteis
+- [QUERIES.md](QUERIES.md) - Exemplos de consultas SQL úteis (usando valor_conta)
 - [INDEXES.md](INDEXES.md) - Documentação de índices do banco
 - [ACCESS.md](ACCESS.md) - Configuração de acesso ao banco
-
-## 🔐 Permissões do Banco de Dados
-
-### Usuários Configurados
-
-Todos os usuários abaixo têm permissões completas nas tabelas bronze e auditoria:
-
-- `bruno.pires@creditsbrasil.com.br`
-- `bruno_cavalcante`
-- `crislaine_cardoso`
-- `joao.viveiros@creditsbrasil.com.br`
-- `joao_viveiros`
-- `maria.rodrigues@creditsbrasil.com.br`
-- `maria_rodrigues`
-
-### Privilégios Concedidos
-
-Cada usuário pode:
-- ✅ `SELECT` - Consultar dados
-- ✅ `INSERT` - Inserir registros
-- ✅ `UPDATE` - Atualizar registros
-- ✅ `DELETE` - Deletar registros
-- ✅ `TRUNCATE` - Limpar tabelas (necessário para reset)
-- ✅ Executar todos os scripts do projeto
-
-## 📈 Últimas Otimizações Aplicadas
-
-### Código
-- ✅ Comentários inline explicativos em seções críticas
-- ✅ Redução de campos obrigatórios (faturamento: 33→5)
-- ✅ Documentação de contexto de negócio
-- ✅ Validações alinhadas com princípios Bronze Layer
-
-### Performance
-- ✅ 11 novos índices documentados (ver INDEXES.md)
-- ✅ Queries analíticas otimizadas
-- ✅ COPY FROM STDIN para bulk inserts
-
-### Qualidade de Dados
-- ✅ Estratégia WARN vs ERROR implementada
-- ✅ Sistema de auditoria completo
-- ✅ Detecção de duplicatas por hash MD5
-- ✅ 91.2% taxa de sucesso na última ingestão
 
 ## 🎯 Próximos Passos
 
 1. **Aplicar índices de performance** (ver [INDEXES.md](INDEXES.md))
 2. **Implementar camada Silver** para transformações
-3. **Corrigir datas inválidas** no arquivo fonte de faturamento
-4. **Criar views analíticas** para relatórios
+3. **Criar views analíticas** para relatórios
 
 ---
 
-**Versão**: 2.0  
-**Última Atualização**: 2025-12-09  
+**Versão**: 2.1  
+**Última Atualização**: 2025-12-11  
 **Mantido por**: Equipe Credits Brasil
