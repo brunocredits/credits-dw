@@ -1,180 +1,127 @@
 # Consultas SQL Essenciais - Credits DW
 
-Este documento contém 4 queries essenciais para análise dos dados da camada Bronze.
+Queries simples e diretas para análise dos dados da camada Bronze.
 
 ---
 
-## Query 1: Análise de Base Oficial (Clientes)
+## Query 1: Base Oficial (Clientes)
 
-**Objetivo:** Visão geral da carteira de clientes por segmento e status.
-
-**Retorna:**
-- `segmento`: Segmento de mercado do cliente
-- `status`: Status do cliente (Ativo/Inativo)
-- `qtd_clientes`: Quantidade de clientes no segmento
-- `qtd_cnpjs_ativos`: CNPJs com status ativo
-
-**Uso:** Entender a distribuição da carteira de clientes e identificar segmentos prioritários.
+**Objetivo:** Listar clientes ativos com dados completos.
 
 ```sql
 SELECT 
+    cnpj,
+    nome_fantasia,
     segmento,
-    status,
-    COUNT(*) as qtd_clientes,
-    COUNT(*) FILTER (WHERE status = 'Ativo') as qtd_cnpjs_ativos,
-    STRING_AGG(DISTINCT grupo, ', ') as grupos
+    grupo,
+    responsavel
 FROM bronze.base_oficial
 WHERE empresa = 'Credits'
-GROUP BY segmento, status
-ORDER BY qtd_clientes DESC;
+  AND status = 'Ativo'
+  AND cnpj IS NOT NULL
+  AND nome_fantasia IS NOT NULL
+  AND segmento IS NOT NULL
+  AND grupo IS NOT NULL
+  AND responsavel IS NOT NULL
+ORDER BY nome_fantasia
+LIMIT 50;
 ```
 
 ---
 
-## Query 2: Análise de Faturamento
+## Query 2: Faturamento
 
-**Objetivo:** Evolução mensal do faturamento com métricas financeiras.
-
-**Retorna:**
-- `mes`: Mês de referência
-- `faturamento_total`: Soma de `valor_da_conta`
-- `recebido_total`: Soma de `valor_recebido`
-- `a_receber_total`: Soma de `valor_a_receber`
-- `qtd_clientes`: Clientes únicos que faturaram
-- `qtd_notas`: Total de notas fiscais
-- `ticket_medio`: Valor médio por nota
-
-**Uso:** Acompanhar performance financeira mensal e identificar tendências.
+**Objetivo:** Faturamento mensal com dados completos.
 
 ```sql
 SELECT 
     DATE_TRUNC('month', data_fat)::date as mes,
-    SUM(valor_da_conta) as faturamento_total,
-    SUM(valor_recebido) as recebido_total,
-    SUM(valor_a_receber) as a_receber_total,
-    COUNT(DISTINCT cnpj) as qtd_clientes,
     COUNT(*) as qtd_notas,
-    AVG(valor_da_conta) as ticket_medio,
-    ROUND(
-        (SUM(valor_recebido) * 100.0) / NULLIF(SUM(valor_da_conta), 0), 
-        2
-    ) as taxa_recebimento_pct
+    SUM(valor_da_conta) as faturamento_total,
+    COUNT(DISTINCT cnpj) as qtd_clientes
 FROM bronze.faturamento
-WHERE data_fat IS NOT NULL
-  AND empresa = 'Credits'
+WHERE empresa = 'Credits'
+  AND data_fat IS NOT NULL
+  AND valor_da_conta IS NOT NULL
+  AND cnpj IS NOT NULL
 GROUP BY DATE_TRUNC('month', data_fat)
-ORDER BY mes DESC;
+ORDER BY mes DESC
+LIMIT 12;
 ```
 
 ---
 
-## Query 3: Análise de Usuários (Equipe de Vendas)
+## Query 3: Usuários (Equipe)
 
-**Objetivo:** Visão da estrutura da equipe de vendas por time e cargo.
-
-**Retorna:**
-- `time`: Time de vendas
-- `cargo`: Cargo do colaborador
-- `status_vendedor`: Status (Ativo/Inativo)
-- `qtd_vendedores`: Quantidade de vendedores
-- `vendedores`: Lista de nomes
-
-**Uso:** Entender a estrutura da equipe comercial e distribuição de recursos.
+**Objetivo:** Listar vendedores ativos com dados completos.
 
 ```sql
 SELECT 
-    time,
+    consultor,
     cargo,
-    status_vendedor,
-    COUNT(*) as qtd_vendedores,
-    STRING_AGG(consultor, ', ' ORDER BY consultor) as vendedores
+    time,
+    nivel
 FROM bronze.usuarios
-GROUP BY time, cargo, status_vendedor
-ORDER BY time, cargo, qtd_vendedores DESC;
+WHERE status_vendedor = 'Ativo'
+  AND consultor IS NOT NULL
+  AND cargo IS NOT NULL
+  AND time IS NOT NULL
+  AND nivel IS NOT NULL
+ORDER BY time, consultor;
 ```
 
 ---
 
-## Query 4: Análise Financeira Completa (JOIN)
+## Query 4: Análise Financeira (JOIN Completo)
 
-**Objetivo:** Análise 360° cruzando faturamento, clientes e vendedores para responder questões financeiras e comerciais.
-
-**Retorna:**
-- `mes`: Mês de referência
-- `cliente_nome_fantasia`: Nome do cliente
-- `cnpj`: CNPJ do cliente
-- `segmento`: Segmento do cliente
-- `vendedor`: Vendedor responsável
-- `time_vendedor`: Time do vendedor
-- `cargo`: Cargo do vendedor
-- `faturamento`: Valor faturado
-- `recebido`: Valor recebido
-- `a_receber`: Valor a receber
-- `taxa_recebimento_pct`: % de recebimento
-
-**Uso:** Responder perguntas como:
-- Qual o faturamento por vendedor/time?
-- Quais segmentos têm melhor taxa de recebimento?
-- Qual a performance financeira por cliente?
-- Quais vendedores têm maior inadimplência na carteira?
+**Objetivo:** Cruzar faturamento + clientes + vendedores com TODOS os dados preenchidos.
 
 ```sql
 SELECT 
-    DATE_TRUNC('month', f.data_fat)::date as mes,
     f.cliente_nome_fantasia,
     f.cnpj,
     bo.segmento,
-    bo.grupo,
     f.vendedor,
-    u.time as time_vendedor,
-    u.cargo,
-    u.nivel,
+    u.time,
     SUM(f.valor_da_conta) as faturamento,
-    SUM(f.valor_recebido) as recebido,
-    SUM(f.valor_a_receber) as a_receber,
-    COUNT(*) as qtd_notas,
-    ROUND(
-        (SUM(f.valor_recebido) * 100.0) / NULLIF(SUM(f.valor_da_conta), 0),
-        2
-    ) as taxa_recebimento_pct
+    COUNT(*) as qtd_notas
 FROM bronze.faturamento f
-LEFT JOIN bronze.base_oficial bo 
+INNER JOIN bronze.base_oficial bo 
     ON f.cnpj = bo.cnpj
-LEFT JOIN bronze.usuarios u 
+INNER JOIN bronze.usuarios u 
     ON UPPER(TRIM(SPLIT_PART(f.vendedor, '-', 1))) = UPPER(u.consultor)
 WHERE f.empresa = 'Credits'
   AND f.data_fat >= '2024-01-01'
-GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
-ORDER BY mes DESC, faturamento DESC;
-```
-
-**Exemplos de análises derivadas:**
-
-```sql
--- Top 10 vendedores por faturamento
-SELECT vendedor, time_vendedor, SUM(faturamento) as total
-FROM (...query acima...)
-GROUP BY vendedor, time_vendedor
-ORDER BY total DESC LIMIT 10;
-
--- Segmentos com melhor taxa de recebimento
-SELECT segmento, AVG(taxa_recebimento_pct) as taxa_media
-FROM (...query acima...)
-GROUP BY segmento
-ORDER BY taxa_media DESC;
-
--- Performance por time
-SELECT time_vendedor, SUM(faturamento) as total, AVG(taxa_recebimento_pct) as taxa_media
-FROM (...query acima...)
-GROUP BY time_vendedor
-ORDER BY total DESC;
+  -- Filtros para garantir dados completos no faturamento
+  AND f.cliente_nome_fantasia IS NOT NULL
+  AND f.cnpj IS NOT NULL
+  AND f.vendedor IS NOT NULL
+  AND f.valor_da_conta IS NOT NULL
+  AND f.data_fat IS NOT NULL
+  -- Filtros para garantir dados completos na base_oficial
+  AND bo.segmento IS NOT NULL
+  AND bo.nome_fantasia IS NOT NULL
+  AND bo.status = 'Ativo'
+  -- Filtros para garantir dados completos nos usuarios
+  AND u.time IS NOT NULL
+  AND u.cargo IS NOT NULL
+  AND u.status_vendedor = 'Ativo'
+GROUP BY 
+    f.cliente_nome_fantasia,
+    f.cnpj,
+    bo.segmento,
+    f.vendedor,
+    u.time
+HAVING SUM(f.valor_da_conta) > 0
+ORDER BY faturamento DESC
+LIMIT 100;
 ```
 
 ---
 
-## 💡 Dicas de Performance
+## 💡 Dicas
 
-- Use índices em `cnpj`, `vendedor`, `data_fat` (ver [INDEXES.md](INDEXES.md))
-- Sempre filtre por `empresa = 'Credits'` quando necessário
-- Use `EXPLAIN ANALYZE` para otimizar queries lentas
-- Para análises de períodos longos, considere criar views materializadas
+- Todas as queries filtram dados nulos para garantir integridade
+- Use `LIMIT` para testes rápidos
+- A Query 4 usa `INNER JOIN` (só retorna registros que existem em todas as tabelas)
+- Para ver mais resultados, aumente o `LIMIT`
