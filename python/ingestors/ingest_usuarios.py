@@ -27,7 +27,7 @@ class IngestUsuarios(BaseIngestor):
             target_table="bronze.usuarios",
             mandatory_cols=[
                 'cargo', 'status_vendedor', 'consultor', 'nivel', 'time',
-                'acesso_vendedor', 'acesso_gerente', 'acesso_indireto',
+                'acesso_vendedor', 'acesso_gerente',
                 'acesso_diretoria', 'acesso_temporario'
             ]
         )
@@ -47,4 +47,4 @@ class IngestUsuarios(BaseIngestor):
 
 if __name__ == "__main__":
     # Permite que o ingestor seja executado como um script autônomo
-    IngestUsuarios().run("usuario.csv")
+    IngestUsuarios().run("usuarios.csv")

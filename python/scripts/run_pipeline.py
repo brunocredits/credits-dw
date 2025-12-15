@@ -21,8 +21,7 @@ from python.ingestors.ingest_usuarios import IngestUsuarios
 INGESTOR_MAPPING = {
     'base_oficial': IngestBaseOficial,
     'faturamento': IngestFaturamento,
-    'usuario': IngestUsuarios,
-    'usuarios': IngestUsuarios,  # Aceita 'usuario' e 'usuarios' para flexibilidade
+    'usuarios': IngestUsuarios,
 }
 
 def auto_discover_files():

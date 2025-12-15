@@ -107,7 +107,7 @@ Apenas 5 campos essenciais:
 - `empresa`, `grupo`, `corte`, `segmento`, `obs`
 
 ### Usuários
-Todos os campos do template são obrigatórios para manter integridade da hierarquia de vendas.
+Todos os campos do template são obrigatórios para manter integridade da hierarquia de vendas, exceto `acesso_indireto` que é opcional.
 
 ## 🚀 Otimizações de Performance
 
