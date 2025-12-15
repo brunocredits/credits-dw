@@ -1,156 +1,180 @@
-# Consultas Analíticas - Credits DW (Bronze Layer)
+# Consultas SQL Essenciais - Credits DW
 
-Este documento contém queries SQL essenciais para análise de faturamento.
-**Métrica principal:** `valor_da_conta` na tabela `faturamento`.
+Este documento contém 4 queries essenciais para análise dos dados da camada Bronze.
 
 ---
 
-## 📊 Queries Gerais
+## Query 1: Análise de Base Oficial (Clientes)
 
-### 1. Faturamento Total por Mês
-**Objetivo:** Visualizar a evolução do faturamento da empresa Credits ao longo dos meses.
+**Objetivo:** Visão geral da carteira de clientes por segmento e status.
 
 **Retorna:**
-- `mes`: Mês de referência (primeiro dia do mês)
-- `faturamento_total`: Soma total de `valor_da_conta` para o mês
-- `qtd_clientes`: Quantidade de clientes únicos (CNPJs distintos) que faturaram no mês
-- `faturamento_ano`: Soma total de `valor_da_conta` para o ano completo
-- `acumulado_ano`: Soma acumulada do ano até aquele mês
+- `segmento`: Segmento de mercado do cliente
+- `status`: Status do cliente (Ativo/Inativo)
+- `qtd_clientes`: Quantidade de clientes no segmento
+- `qtd_cnpjs_ativos`: CNPJs com status ativo
 
-**Uso:** Identifica tendências de crescimento/queda e sazonalidade no faturamento.
+**Uso:** Entender a distribuição da carteira de clientes e identificar segmentos prioritários.
+
+```sql
+SELECT 
+    segmento,
+    status,
+    COUNT(*) as qtd_clientes,
+    COUNT(*) FILTER (WHERE status = 'Ativo') as qtd_cnpjs_ativos,
+    STRING_AGG(DISTINCT grupo, ', ') as grupos
+FROM bronze.base_oficial
+WHERE empresa = 'Credits'
+GROUP BY segmento, status
+ORDER BY qtd_clientes DESC;
+```
+
+---
+
+## Query 2: Análise de Faturamento
+
+**Objetivo:** Evolução mensal do faturamento com métricas financeiras.
+
+**Retorna:**
+- `mes`: Mês de referência
+- `faturamento_total`: Soma de `valor_da_conta`
+- `recebido_total`: Soma de `valor_recebido`
+- `a_receber_total`: Soma de `valor_a_receber`
+- `qtd_clientes`: Clientes únicos que faturaram
+- `qtd_notas`: Total de notas fiscais
+- `ticket_medio`: Valor médio por nota
+
+**Uso:** Acompanhar performance financeira mensal e identificar tendências.
 
 ```sql
 SELECT 
     DATE_TRUNC('month', data_fat)::date as mes,
     SUM(valor_da_conta) as faturamento_total,
+    SUM(valor_recebido) as recebido_total,
+    SUM(valor_a_receber) as a_receber_total,
     COUNT(DISTINCT cnpj) as qtd_clientes,
-    SUM(SUM(valor_da_conta)) OVER (
-        PARTITION BY EXTRACT(YEAR FROM data_fat)
-    ) as faturamento_ano,
-    SUM(SUM(valor_da_conta)) OVER (
-        PARTITION BY EXTRACT(YEAR FROM data_fat) 
-        ORDER BY DATE_TRUNC('month', data_fat)
-    ) as acumulado_ano
+    COUNT(*) as qtd_notas,
+    AVG(valor_da_conta) as ticket_medio,
+    ROUND(
+        (SUM(valor_recebido) * 100.0) / NULLIF(SUM(valor_da_conta), 0), 
+        2
+    ) as taxa_recebimento_pct
 FROM bronze.faturamento
 WHERE data_fat IS NOT NULL
   AND empresa = 'Credits'
-GROUP BY DATE_TRUNC('month', data_fat), EXTRACT(YEAR FROM data_fat)
-ORDER BY 1 DESC;
-```
-
-### 2. Top 10 Clientes por Valor Faturado
-**Objetivo:** Identificar os 10 maiores clientes da empresa Credits por volume de faturamento.
-
-**Retorna:**
-- `cnpj`: CNPJ do cliente
-- `cliente_nome_fantasia`: Nome fantasia do cliente
-- `total_faturado`: Soma total de `valor_da_conta` para o cliente (todo período)
-- `qtd_notas`: Quantidade de notas fiscais emitidas para o cliente
-
-**Uso:** Análise de concentração de receita e identificação de clientes-chave (regra 80/20).
-
-```sql
-SELECT 
-    cnpj,
-    cliente_nome_fantasia,
-    SUM(valor_da_conta) as total_faturado,
-    COUNT(*) as qtd_notas
-FROM bronze.faturamento
-WHERE valor_da_conta IS NOT NULL 
-  AND empresa = 'Credits'
-GROUP BY 1, 2
-ORDER BY 3 DESC
-LIMIT 10;
+GROUP BY DATE_TRUNC('month', data_fat)
+ORDER BY mes DESC;
 ```
 
 ---
 
-## 🎯 Análise Específica: VIA CERTA FINANCEIRA
+## Query 3: Análise de Usuários (Equipe de Vendas)
 
-### 3. Faturamento Mês a Mês da VIA CERTA
-**Objetivo:** Analisar a evolução temporal do faturamento específico da VIA CERTA FINANCEIRA S.A., com métricas financeiras detalhadas.
+**Objetivo:** Visão da estrutura da equipe de vendas por time e cargo.
 
 **Retorna:**
-- `mes`: Mês de referência
-- `cliente_nome_fantasia`: Nome do cliente (VIA CERTA)
-- `qtd_notas_fiscais`: Quantidade de notas emitidas no mês
-- `faturamento_mes`: Valor total faturado no mês
-- `recebido_mes`: Valor efetivamente recebido no mês
-- `pendente_mes`: Valor ainda não recebido (a receber)
-- `taxa_recebimento_pct`: Percentual de quanto foi recebido em relação ao faturado
-- `ticket_medio`: Valor médio por nota fiscal
+- `time`: Time de vendas
+- `cargo`: Cargo do colaborador
+- `status_vendedor`: Status (Ativo/Inativo)
+- `qtd_vendedores`: Quantidade de vendedores
+- `vendedores`: Lista de nomes
 
-**Uso:** Acompanhar saúde financeira do cliente, identificar meses com inadimplência e padrões de comportamento.
+**Uso:** Entender a estrutura da equipe comercial e distribuição de recursos.
 
 ```sql
 SELECT 
-    DATE_TRUNC('month', data_fat) as mes,
-    cliente_nome_fantasia,
-    COUNT(*) as qtd_notas_fiscais,
-    SUM(valor_da_conta) as faturamento_mes,
-    SUM(valor_recebido) as recebido_mes,
-    SUM(valor_a_receber) as pendente_mes,
-    ROUND(
-        (SUM(valor_recebido) * 100.0) / NULLIF(SUM(valor_da_conta), 0), 
-        2
-    ) as taxa_recebimento_pct,
-    AVG(valor_da_conta) as ticket_medio
-FROM bronze.faturamento
-WHERE cliente_nome_fantasia ILIKE '%VIA CERTA%'
-  AND empresa = 'Credits'
-  AND data_fat >= '2022-01-01'
-GROUP BY 1, 2
-ORDER BY 1 DESC;
+    time,
+    cargo,
+    status_vendedor,
+    COUNT(*) as qtd_vendedores,
+    STRING_AGG(consultor, ', ' ORDER BY consultor) as vendedores
+FROM bronze.usuarios
+GROUP BY time, cargo, status_vendedor
+ORDER BY time, cargo, qtd_vendedores DESC;
 ```
 
-### 4. VIA CERTA com Vendedor e Segmento (JOIN)
-**Objetivo:** Análise 360° da VIA CERTA cruzando dados de faturamento com informações de vendedor e segmentação do cliente.
+---
+
+## Query 4: Análise Financeira Completa (JOIN)
+
+**Objetivo:** Análise 360° cruzando faturamento, clientes e vendedores para responder questões financeiras e comerciais.
 
 **Retorna:**
 - `mes`: Mês de referência
-- `cliente_nome_fantasia`: Nome do cliente (VIA CERTA)
-- `vendedor`: Nome do vendedor responsável
-- `time_vendedor`: Time ao qual o vendedor pertence
+- `cliente_nome_fantasia`: Nome do cliente
+- `cnpj`: CNPJ do cliente
+- `segmento`: Segmento do cliente
+- `vendedor`: Vendedor responsável
+- `time_vendedor`: Time do vendedor
 - `cargo`: Cargo do vendedor
-- `segmento`: Segmento de mercado do cliente (da tabela `base_oficial`)
-- `faturamento_total`: Valor total faturado no mês
-- `recebido_total`: Valor total recebido no mês
-- `qtd_notas`: Quantidade de notas fiscais
-- `taxa_recebimento_pct`: Percentual de recebimento
+- `faturamento`: Valor faturado
+- `recebido`: Valor recebido
+- `a_receber`: Valor a receber
+- `taxa_recebimento_pct`: % de recebimento
 
-**Uso:** Entender o contexto comercial completo - quem vende, qual time, segmento do cliente e performance financeira. Útil para análise de carteira e performance de vendedores.
+**Uso:** Responder perguntas como:
+- Qual o faturamento por vendedor/time?
+- Quais segmentos têm melhor taxa de recebimento?
+- Qual a performance financeira por cliente?
+- Quais vendedores têm maior inadimplência na carteira?
 
 ```sql
 SELECT 
     DATE_TRUNC('month', f.data_fat)::date as mes,
     f.cliente_nome_fantasia,
+    f.cnpj,
+    bo.segmento,
+    bo.grupo,
     f.vendedor,
     u.time as time_vendedor,
     u.cargo,
-    bo.segmento,
-    SUM(f.valor_da_conta) as faturamento_total,
-    SUM(f.valor_recebido) as recebido_total,
+    u.nivel,
+    SUM(f.valor_da_conta) as faturamento,
+    SUM(f.valor_recebido) as recebido,
+    SUM(f.valor_a_receber) as a_receber,
     COUNT(*) as qtd_notas,
     ROUND(
         (SUM(f.valor_recebido) * 100.0) / NULLIF(SUM(f.valor_da_conta), 0),
         2
     ) as taxa_recebimento_pct
 FROM bronze.faturamento f
-LEFT JOIN bronze.usuarios u 
-    ON UPPER(TRIM(SPLIT_PART(f.vendedor, '-', 1))) = UPPER(u.consultor)
 LEFT JOIN bronze.base_oficial bo 
     ON f.cnpj = bo.cnpj
-WHERE f.cliente_nome_fantasia ILIKE '%VIA CERTA%'
-  AND f.empresa = 'Credits'
-  AND f.data_fat >= '2022-01-01'
-GROUP BY 1, 2, 3, 4, 5, 6
-ORDER BY 1 DESC;
+LEFT JOIN bronze.usuarios u 
+    ON UPPER(TRIM(SPLIT_PART(f.vendedor, '-', 1))) = UPPER(u.consultor)
+WHERE f.empresa = 'Credits'
+  AND f.data_fat >= '2024-01-01'
+GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+ORDER BY mes DESC, faturamento DESC;
+```
+
+**Exemplos de análises derivadas:**
+
+```sql
+-- Top 10 vendedores por faturamento
+SELECT vendedor, time_vendedor, SUM(faturamento) as total
+FROM (...query acima...)
+GROUP BY vendedor, time_vendedor
+ORDER BY total DESC LIMIT 10;
+
+-- Segmentos com melhor taxa de recebimento
+SELECT segmento, AVG(taxa_recebimento_pct) as taxa_media
+FROM (...query acima...)
+GROUP BY segmento
+ORDER BY taxa_media DESC;
+
+-- Performance por time
+SELECT time_vendedor, SUM(faturamento) as total, AVG(taxa_recebimento_pct) as taxa_media
+FROM (...query acima...)
+GROUP BY time_vendedor
+ORDER BY total DESC;
 ```
 
 ---
 
-## 💡 Dicas
+## 💡 Dicas de Performance
 
-- Use índices em `cnpj`, `vendedor`, `data_fat`
+- Use índices em `cnpj`, `vendedor`, `data_fat` (ver [INDEXES.md](INDEXES.md))
 - Sempre filtre por `empresa = 'Credits'` quando necessário
-- Use `EXPLAIN ANALYZE` para otimizar queries
+- Use `EXPLAIN ANALYZE` para otimizar queries lentas
+- Para análises de períodos longos, considere criar views materializadas
