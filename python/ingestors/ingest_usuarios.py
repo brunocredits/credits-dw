@@ -27,8 +27,7 @@ class IngestUsuarios(BaseIngestor):
             target_table="bronze.usuarios",
             mandatory_cols=[
                 'cargo', 'status_vendedor', 'consultor', 'nivel', 'time',
-                'acesso_vendedor', 'acesso_gerente',
-                'acesso_diretoria', 'acesso_temporario'
+                'acesso_vendedor', 'acesso_gerente', 'acesso_diretoria'
             ]
         )
 
