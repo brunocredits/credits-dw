@@ -119,6 +119,41 @@ LIMIT 100;
 
 ---
 
+## Query 5: Top 10 Clientes com Mais Faturamento
+
+**Objetivo:** Listar os 10 clientes com maior faturamento total para a Credits e seus responsáveis.
+
+```sql
+SELECT 
+    MAX(f.cliente_nome_fantasia) as cliente,
+    f.cnpj,
+    STRING_AGG(DISTINCT f.vendedor, ', ' ORDER BY f.vendedor) as responsaveis,
+    SUM(f.valor_da_conta) as faturamento_total,
+    COUNT(*) as qtd_notas,
+    COUNT(DISTINCT DATE_TRUNC('month', f.data_fat)) as meses_ativos,
+    MIN(f.data_fat) as primeira_venda,
+    MAX(f.data_fat) as ultima_venda
+FROM bronze.faturamento f
+WHERE f.empresa = 'Credits'
+  AND f.data_fat >= '2024-01-01'
+  AND f.cnpj IS NOT NULL
+  AND f.valor_da_conta IS NOT NULL
+GROUP BY f.cnpj
+HAVING SUM(f.valor_da_conta) > 0
+ORDER BY faturamento_total DESC
+LIMIT 10;
+```
+
+**Retorna:**
+- Nome fantasia e CNPJ do cliente
+- Responsáveis (vendedores) que atenderam o cliente
+- Faturamento total acumulado
+- Quantidade de notas fiscais
+- Número de meses com atividade
+- Data da primeira e última venda
+
+---
+
 ## 💡 Dicas
 
 - Todas as queries filtram dados nulos para garantir integridade
