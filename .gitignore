@@ -6,7 +6,6 @@
 # Claude/AI files
 *credentials*.json
 *.crt
-*.csv
 # Database dumps
 # Data files - Prevent committing sensitive data
 desktop.ini
@@ -15,9 +14,6 @@ docker/data/input/**/*.csv
 docker/data/input/**/*.xls
 docker/data/input/**/*.xlsx
 docker/data/processed/
-docker/data/templates/*.csv
-!docker/data/templates/.gitkeep
-docker/data/templates/*.xlsx
 docker/logs/
 docker/sql/
 DOCUMENTATION.md
@@ -61,5 +57,14 @@ Thumbs.db
 .venv
 venv/
 .vscode/
+
+# Block all CSV/XLS/XLSX files
+*.csv
 *.xls
 *.xlsx
+
+# Allow only templates
+!docker/data/templates/template_*.csv
+!docker/data/templates/template_*.xlsx
+!docker/data/templates/template_*.ods
+!docker/data/templates/.gitkeep
